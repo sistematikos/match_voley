@@ -1,9 +1,8 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
 
-const STORAGE_KEY = 'match_control_torneo_v2';
 const TABLA_TORNEOS = 'torneos_match_control';
 
-let estado = cargarEstadoLocal();
+let estado = estadoInicial();
 let rondaPendienteConfirmar = 8;
 let supabaseClub = null;
 let empresaIdActual = '';
@@ -51,30 +50,6 @@ function obtenerDatosCategoriaActiva() {
     return estado.categoriasData[cat];
 }
 
-function cargarEstadoLocal() {
-    try {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        if (!raw) return estadoInicial();
-        const parsed = JSON.parse(raw);
-        const base = estadoInicial();
-        const merged = {
-            ...base,
-            ...parsed,
-            equipos: Array.isArray(parsed.equipos) ? parsed.equipos : [],
-            categoriasData: parsed.categoriasData && typeof parsed.categoriasData === 'object'
-                ? parsed.categoriasData
-                : base.categoriasData
-        };
-        merged.categoriaActiva = merged.categoriaActiva || 'Libre';
-        if (!merged.categoriasData[merged.categoriaActiva]) {
-            merged.categoriasData[merged.categoriaActiva] = crearEstructuraCategoria(merged.categoriaActiva);
-        }
-        return merged;
-    } catch (e) {
-        return estadoInicial();
-    }
-}
-
 function actualizarEstadoSync(texto, colorClass = 'text-slate-300') {
     const el = document.getElementById('syncStatusTexto');
     if (el) {
@@ -93,7 +68,7 @@ function inicializarSupabaseClub() {
     const supaUrl = localStorage.getItem('control_voley_supa_url') || '';
     const supaKey = localStorage.getItem('control_voley_supa_key') || '';
 
-    if (supaUrl && supaKey) {
+    if (supaUrl && supaKey && empresaIdActual) {
         supabaseClub = createClient(supaUrl, supaKey);
         return true;
     }
@@ -104,12 +79,12 @@ function inicializarSupabaseClub() {
 
 async function cargarDesdeSupabase() {
     if (!supabaseClub || !empresaIdActual) {
-        actualizarEstadoSync('Modo local activo', 'text-amber-300');
+        actualizarEstadoSync('Configura Supabase al activar licencia', 'text-red-300');
         return;
     }
 
     try {
-        actualizarEstadoSync('Cargando torneo...', 'text-cyan-300');
+        actualizarEstadoSync('Cargando desde Supabase...', 'text-cyan-300');
 
         const { data, error } = await supabaseClub
             .from(TABLA_TORNEOS)
@@ -130,26 +105,27 @@ async function cargarDesdeSupabase() {
                     : estadoInicial().categoriasData
             };
             asegurarCategoria(estado.categoriaActiva);
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(estado));
             renderTodo();
-            actualizarEstadoSync('Sincronizado con Supabase', 'text-emerald-300');
+            actualizarEstadoSync('Conectado a Supabase', 'text-emerald-300');
         } else {
             await guardarEnSupabase();
         }
     } catch (err) {
         console.error('Error al cargar desde Supabase:', err);
-        actualizarEstadoSync('Respaldo local activo', 'text-amber-300');
+        actualizarEstadoSync('Error al leer Supabase', 'text-red-300');
     }
 }
 
 async function guardarEnSupabase() {
+    actualizarBadges();
+
     if (!supabaseClub || !empresaIdActual) {
-        actualizarEstadoSync('Guardado en dispositivo', 'text-slate-300');
+        actualizarEstadoSync('Sin conexión a Supabase', 'text-red-300');
         return;
     }
 
     try {
-        actualizarEstadoSync('Guardando...', 'text-cyan-300');
+        actualizarEstadoSync('Guardando en Supabase...', 'text-cyan-300');
 
         const { error } = await supabaseClub
             .from(TABLA_TORNEOS)
@@ -168,14 +144,12 @@ async function guardarEnSupabase() {
         actualizarEstadoSync('Guardado en Supabase', 'text-emerald-300');
     } catch (err) {
         console.error('Error al guardar en Supabase:', err);
-        actualizarEstadoSync('Error nube (guardado local)', 'text-red-300');
+        actualizarEstadoSync('Error al guardar en Supabase', 'text-red-300');
     }
 }
 
 function guardarEstado() {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(estado));
     actualizarBadges();
-
     clearTimeout(temporizadorSync);
     temporizadorSync = setTimeout(() => {
         guardarEnSupabase();
@@ -192,7 +166,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     const formEquipo = document.getElementById('formEquipo');
     if (formEquipo) {
-        formEquipo.addEventListener('submit', (e) => {
+        formEquipo.addEventListener('submit', async (e) => {
             e.preventDefault();
             const catEquipo = asegurarCategoria(document.getElementById('categoriaEquipo').value);
             const nuevoEquipo = {
@@ -205,17 +179,17 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             estado.equipos.push(nuevoEquipo);
             estado.categoriaActiva = catEquipo;
-            guardarEstado();
             e.target.reset();
             renderTodo();
+            await guardarEnSupabase();
         });
     }
 
     const btnConfirmarElim = document.getElementById('btnConfirmarElim');
     if (btnConfirmarElim) {
-        btnConfirmarElim.addEventListener('click', () => {
+        btnConfirmarElim.addEventListener('click', async () => {
             cerrarModalElim();
-            generarEliminatoriaDesdeEstadistica(rondaPendienteConfirmar);
+            await generarEliminatoriaDesdeEstadistica(rondaPendienteConfirmar);
         });
     }
 
@@ -244,33 +218,33 @@ function renderSelectorCategorias() {
         .join('');
 }
 
-function cambiarCategoriaActiva(nuevaCat) {
+async function cambiarCategoriaActiva(nuevaCat) {
     estado.categoriaActiva = asegurarCategoria(nuevaCat);
-    guardarEstado();
     renderTodo();
+    await guardarEnSupabase();
 }
 
-function actualizarDatosTorneo() {
+async function actualizarDatosTorneo() {
     const input = document.getElementById('nombreTorneoInput');
     if (input) {
         estado.nombreTorneo = input.value.trim() || 'Torneo Oficial de Voleibol';
-        guardarEstado();
+        await guardarEnSupabase();
     }
 }
 
-function actualizarReglaCategoria() {
+async function actualizarReglaCategoria() {
     const catData = obtenerDatosCategoriaActiva();
     catData.diasJuego = document.getElementById('diasJuegoCategoria')?.value.trim() || '';
     catData.condiciones = document.getElementById('condicionesCategoria')?.value.trim() || '';
-    guardarEstado();
+    await guardarEnSupabase();
 }
 
 function actualizarCantidadGruposInput(valor) {
     const catData = obtenerDatosCategoriaActiva();
     const num = parseInt(valor, 10);
     catData.cantidadGrupos = Number.isNaN(num) || num < 1 ? 1 : Math.min(num, 20);
-    guardarEstado();
     renderResumenGruposCategoria();
+    guardarEstado();
 }
 
 function cambiarVista(vista) {
@@ -310,10 +284,10 @@ function actualizarBadges() {
     document.getElementById('badgeRondaActual').textContent = catData.eliminatoria?.rondaActual || 'Pendiente';
 }
 
-function eliminarEquipo(id) {
+async function eliminarEquipo(id) {
     estado.equipos = estado.equipos.filter((eq) => eq.id !== id);
-    guardarEstado();
     renderTodo();
+    await guardarEnSupabase();
 }
 
 function renderResumenGruposCategoria() {
@@ -374,7 +348,7 @@ function renderEquipos() {
         .join('');
 }
 
-function generarFaseGruposCategoria() {
+async function generarFaseGruposCategoria() {
     const catActiva = asegurarCategoria(estado.categoriaActiva);
     const catData = obtenerDatosCategoriaActiva();
     const poolEquipos = obtenerEquiposDeCategoriaFiltrados();
@@ -426,9 +400,9 @@ function generarFaseGruposCategoria() {
     });
 
     catData.grupos = gruposTemp;
-    guardarEstado();
     renderTodo();
     cambiarVista('grupos');
+    await guardarEnSupabase();
 }
 
 function obtenerEquipoPorId(id) {
@@ -486,8 +460,8 @@ function actualizarSetGrupo(grupoIdx, partidoIdx, setIdx, lado, valor) {
     else if (evalRes.ganadorLado === 'B') partido.ganadorId = partido.eqB;
     else partido.ganadorId = null;
 
-    guardarEstado();
     renderGruposYEstadistica();
+    guardarEstado();
 }
 
 function calcularClasificacionCategoria() {
@@ -718,7 +692,7 @@ function emparejarMejorContraPeor(listaOrdenada, rondaEtiqueta) {
     return partidos;
 }
 
-function generarEliminatoriaDesdeEstadistica(tamanoLlave) {
+async function generarEliminatoriaDesdeEstadistica(tamanoLlave) {
     const catData = obtenerDatosCategoriaActiva();
     const ranking = calcularClasificacionCategoria();
 
@@ -742,9 +716,9 @@ function generarEliminatoriaDesdeEstadistica(tamanoLlave) {
         campeon: null
     };
 
-    guardarEstado();
     renderTodo();
     cambiarVista('eliminatorias');
+    await guardarEnSupabase();
 }
 
 function actualizarSetElim(partidoIdx, setIdx, lado, valor) {
@@ -760,11 +734,11 @@ function actualizarSetElim(partidoIdx, setIdx, lado, valor) {
     else if (evalRes.ganadorLado === 'B') partido.ganadorId = partido.eqB;
     else partido.ganadorId = null;
 
-    guardarEstado();
     renderEliminatorias();
+    guardarEstado();
 }
 
-function avanzarSiguienteRondaElim() {
+async function avanzarSiguienteRondaElim() {
     const catData = obtenerDatosCategoriaActiva();
     const elim = catData.eliminatoria;
     const todosResueltos = elim.partidos.length > 0 && elim.partidos.every((p) => p.ganadorId !== null);
@@ -779,8 +753,8 @@ function avanzarSiguienteRondaElim() {
     if (elim.rondaActual === 'Final' || ganadores.length === 1) {
         elim.rondaActual = 'Campeon';
         elim.campeon = ganadores[0];
-        guardarEstado();
         renderEliminatorias();
+        await guardarEnSupabase();
         return;
     }
 
@@ -792,8 +766,8 @@ function avanzarSiguienteRondaElim() {
 
     elim.rondaActual = siguienteEtiqueta;
     elim.partidos = emparejarMejorContraPeor(ganadores, siguienteEtiqueta);
-    guardarEstado();
     renderEliminatorias();
+    await guardarEnSupabase();
 }
 
 function renderEliminatorias() {
@@ -929,12 +903,12 @@ function renderTodo() {
     actualizarBadges();
 }
 
-function resetearTorneoCompleto() {
+async function resetearTorneoCompleto() {
     if (confirm('¿Deseas borrar el torneo actual y empezar uno nuevo en Match Control?')) {
         estado = estadoInicial();
-        guardarEstado();
         renderTodo();
         cambiarVista('equipos');
+        await guardarEnSupabase();
     }
 }
 
