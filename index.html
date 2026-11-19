@@ -40,7 +40,7 @@
                 radial-gradient(at 100% 100%, rgba(0, 210, 255, 0.08) 0px, transparent 50%),
                 radial-gradient(at 50% 50%, rgba(241, 245, 249, 0.5) 0px, transparent 100%);
         }
-        .glass-card { background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.8); }
+        .glass-card { background: rgba(255, 255, 255, 0.92); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.85); }
     </style>
 
     <script>
@@ -65,7 +65,8 @@
             const licenciaValidada = localStorage.getItem('licencia_validada');
             const empresaID = localStorage.getItem('youcontrol_empresa_id');
 
-            if (licenciaValidada === 'true' && empresaID) {
+            // Si ya tiene licencia validada y está abierta desde el acceso directo instalado, entra a match.html
+            if (licenciaValidada === 'true' && empresaID && esPWAInstalada()) {
                 window.location.replace('match.html');
             }
         });
@@ -79,7 +80,8 @@
 </head>
 <body class="bg-sports-pattern min-h-screen flex items-center justify-center p-4 antialiased text-slate-800">
 
-    <div class="glass-card p-8 rounded-3xl shadow-glass border border-slate-200/80 w-full max-w-md text-center space-y-6">
+    <!-- TARJETA PRINCIPAL PARA INGRESAR SERIAL -->
+    <div id="panelActivacion" class="glass-card p-8 rounded-3xl shadow-glass border border-slate-200/80 w-full max-w-md text-center space-y-6">
 
         <div class="w-16 h-16 rounded-2xl bg-gradient-to-tr from-brand-electric to-brand-cyan flex items-center justify-center text-white shadow-electric mx-auto mb-2">
             <i class="fas fa-trophy text-2xl"></i>
@@ -96,7 +98,7 @@
                 <i class="fab fa-apple text-sm"></i> Instalación en iPhone / iPad
             </div>
             <p class="leading-relaxed">
-                Safari requiere instalar Match Control para iniciar. Sigue estos pasos:
+                Safari requiere instalar Match Control como acceso directo. Sigue estos pasos:
             </p>
             <ol class="list-decimal list-inside space-y-1 font-semibold text-[11px] text-amber-800">
                 <li>Toca el botón <strong class="text-slate-900">Compartir</strong> <i class="fas fa-share-from-square text-brand-electric"></i> en Safari.</li>
@@ -105,30 +107,92 @@
             </ol>
         </div>
 
+        <!-- CAMPO DEL SERIAL -->
         <div class="text-left space-y-2">
             <div class="flex justify-between items-center">
-                <label class="block text-xs font-bold uppercase tracking-wider text-slate-600">Pega tu serial de licencia:</label>
+                <label for="tokenInput" class="block text-xs font-bold uppercase tracking-wider text-slate-600">Pega tu serial de licencia:</label>
                 <button type="button" id="btnPegarPortapapeles" class="text-[11px] font-bold text-brand-electric hover:underline flex items-center gap-1 cursor-pointer">
                     <i class="fas fa-paste"></i> Pegar automático
                 </button>
             </div>
-            <textarea id="tokenInput" placeholder="Pega el serial aquí..." class="w-full h-28 p-3.5 bg-white border border-slate-200 rounded-xl text-xs font-mono text-slate-700 outline-none focus:ring-2 focus:ring-brand-electric shadow-sm resize-none"></textarea>
+            <textarea id="tokenInput" placeholder="Pega aquí tu serial de licencia..." class="w-full h-28 p-3.5 bg-white border border-slate-200 rounded-xl text-xs font-mono text-slate-700 outline-none focus:ring-2 focus:ring-brand-electric shadow-sm resize-none"></textarea>
         </div>
 
         <div class="bg-brand-50 border border-brand-electric/20 rounded-2xl p-4 text-center">
             <p class="text-xs font-bold text-slate-700 leading-relaxed">
-                Uso exclusivo desde acceso directo con serial válido. Activa tu licencia para gestionar <strong class="text-brand-electric uppercase">Torneos y Ligas</strong>.
+                1. Pega tu serial • 2. Instala el acceso directo • 3. Entra a <strong class="text-brand-electric uppercase">Match Control</strong>.
             </p>
         </div>
 
-        <button id="btnActivarEInstalar" class="w-full py-4 px-4 bg-brand-electric hover:bg-brand-600 text-white font-black rounded-xl shadow-electric transition text-xs uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer">
-            <i class="fas fa-download text-sm"></i> Activar Licencia e Instalar
+        <button id="btnActivarEInstalar" type="button" class="w-full py-4 px-4 bg-brand-electric hover:bg-brand-600 text-white font-black rounded-xl shadow-electric transition text-xs uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer">
+            <i class="fas fa-key text-sm"></i> Validar Serial y Pedir Instalación
         </button>
 
         <div id="statusMsg" class="text-xs font-bold text-slate-500"></div>
 
         <div class="pt-2 border-t border-slate-100 text-center">
-            <span class="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Match Control • Solo Acceso Directo</span>
+            <span class="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Match Control • Uso Exclusivo por Acceso Directo</span>
+        </div>
+    </div>
+
+    <!-- ========================================================= -->
+    <!-- VENTANA FLOTANTE QUE PIDE INSTALAR TRAS PEGAR/VALIDAR SERIAL -->
+    <!-- ========================================================= -->
+    <div id="modalInstalacion" class="fixed inset-0 bg-brand-dark/75 backdrop-blur-sm hidden items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-3xl max-w-md w-full p-6 md:p-7 shadow-2xl border border-slate-200 space-y-5 relative">
+
+            <button id="btnCerrarModalInstalar" type="button" aria-label="Cerrar ventana" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center absolute top-5 right-5 cursor-pointer transition">
+                <i class="fas fa-times text-xs"></i>
+            </button>
+
+            <div class="flex items-center gap-3">
+                <div class="w-12 h-12 rounded-2xl bg-gradient-to-tr from-brand-electric to-brand-cyan text-white flex items-center justify-center text-xl shadow-electric shrink-0">
+                    <i class="fas fa-download"></i>
+                </div>
+                <div>
+                    <span class="text-[10px] font-black uppercase tracking-widest text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full">
+                        Serial Correcto
+                    </span>
+                    <h2 class="text-base font-black text-slate-900 uppercase tracking-tight mt-1">
+                        Instalar Match Control
+                    </h2>
+                </div>
+            </div>
+
+            <p class="text-xs text-slate-600 font-semibold leading-relaxed">
+                Tu serial es válido. Ahora <strong>instala la aplicación</strong> en tu dispositivo para entrar a <strong>Match Control</strong>.
+            </p>
+
+            <!-- ANDROID / PC -->
+            <div id="bloqueInstalarAndroidPc" class="bg-blue-50/80 border border-brand-electric/20 rounded-2xl p-4 space-y-3">
+                <p class="text-[11px] font-extrabold text-brand-electric uppercase tracking-wider">
+                    <i class="fab fa-android mr-1"></i> Android / <i class="fab fa-windows mr-1"></i> PC (Chrome / Edge)
+                </p>
+                <button id="btnConfirmarInstalacionPWA" type="button" class="w-full py-3.5 px-4 bg-brand-electric hover:bg-brand-600 text-white font-black rounded-xl shadow-electric transition text-xs uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer">
+                    <i class="fas fa-mobile-screen-button"></i> Instalar Aplicación Ahora
+                </button>
+                <p class="text-[11px] text-slate-600 font-semibold leading-snug">
+                    Si no aparece el aviso automático, abre el menú <strong>⋮</strong> del navegador y pulsa <strong>"Instalar aplicación"</strong> o <strong>"Añadir a la pantalla principal"</strong>.
+                </p>
+            </div>
+
+            <!-- iOS / SAFARI -->
+            <div id="bloqueInstalarIos" class="hidden bg-amber-50 border border-amber-200 rounded-2xl p-4 space-y-2 text-xs text-amber-900">
+                <p class="font-black uppercase text-[11px] tracking-wider text-amber-800">
+                    <i class="fab fa-apple mr-1"></i> iPhone / iPad (Safari)
+                </p>
+                <ol class="list-decimal list-inside space-y-1.5 font-semibold text-[11px] text-amber-900">
+                    <li>Toca el botón <strong>Compartir</strong> <i class="fas fa-share-from-square text-brand-electric"></i> en Safari.</li>
+                    <li>Selecciona <strong>"Añadir a la pantalla de inicio"</strong> <i class="fas fa-plus-square"></i>.</li>
+                    <li>Abre <strong>Match Control</strong> desde tu pantalla principal.</li>
+                </ol>
+            </div>
+
+            <div id="estadoModalInstalar" class="text-xs font-bold text-center text-slate-600"></div>
+
+            <button id="btnEntrarMatch" type="button" class="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-xl text-xs uppercase tracking-wider transition cursor-pointer">
+                <i class="fas fa-arrow-right mr-1"></i> Entrar a Match Control
+            </button>
         </div>
     </div>
 
