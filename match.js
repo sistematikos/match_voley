@@ -1,11 +1,21 @@
-const STORAGE_KEY = 'match_control_torneo_v1';
+import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
 
-let estado = cargarEstado();
+const STORAGE_KEY = 'match_control_torneo_v2';
+const TABLA_TORNEOS = 'torneos_match_control';
+
+let estado = cargarEstadoLocal();
 let rondaPendienteConfirmar = 8;
+let supabaseClub = null;
+let empresaIdActual = '';
+let nombreOrgActual = 'Organización de Voleibol';
+let temporizadorSync = null;
 
-function estadoInicial() {
+function crearEstructuraCategoria(nombreCat) {
     return {
-        equipos: [],
+        nombre: nombreCat,
+        diasJuego: '',
+        condiciones: '',
+        cantidadGrupos: 2,
         grupos: [],
         eliminatoria: {
             rondaActual: null,
@@ -15,46 +25,189 @@ function estadoInicial() {
     };
 }
 
-function cargarEstado() {
+function estadoInicial() {
+    return {
+        nombreTorneo: 'Torneo Oficial de Voleibol',
+        categoriaActiva: 'Libre',
+        equipos: [],
+        categoriasData: {
+            'Libre': crearEstructuraCategoria('Libre')
+        }
+    };
+}
+
+function asegurarCategoria(nombreCat) {
+    const limpia = (nombreCat || 'General').trim() || 'General';
+    if (!estado.categoriasData) estado.categoriasData = {};
+    if (!estado.categoriasData[limpia]) {
+        estado.categoriasData[limpia] = crearEstructuraCategoria(limpia);
+    }
+    return limpia;
+}
+
+function obtenerDatosCategoriaActiva() {
+    const cat = asegurarCategoria(estado.categoriaActiva);
+    estado.categoriaActiva = cat;
+    return estado.categoriasData[cat];
+}
+
+function cargarEstadoLocal() {
     try {
         const raw = localStorage.getItem(STORAGE_KEY);
         if (!raw) return estadoInicial();
-        return { ...estadoInicial(), ...JSON.parse(raw) };
+        const parsed = JSON.parse(raw);
+        const base = estadoInicial();
+        const merged = {
+            ...base,
+            ...parsed,
+            equipos: Array.isArray(parsed.equipos) ? parsed.equipos : [],
+            categoriasData: parsed.categoriasData && typeof parsed.categoriasData === 'object'
+                ? parsed.categoriasData
+                : base.categoriasData
+        };
+        merged.categoriaActiva = merged.categoriaActiva || 'Libre';
+        if (!merged.categoriasData[merged.categoriaActiva]) {
+            merged.categoriasData[merged.categoriaActiva] = crearEstructuraCategoria(merged.categoriaActiva);
+        }
+        return merged;
     } catch (e) {
         return estadoInicial();
+    }
+}
+
+function actualizarEstadoSync(texto, colorClass = 'text-slate-300') {
+    const el = document.getElementById('syncStatusTexto');
+    if (el) {
+        el.className = `text-[11px] font-bold ${colorClass}`;
+        el.textContent = texto;
+    }
+}
+
+function inicializarSupabaseClub() {
+    empresaIdActual = localStorage.getItem('youcontrol_empresa_id') || '';
+    nombreOrgActual =
+        localStorage.getItem('control_voley_club_nombre') ||
+        empresaIdActual ||
+        'Organización de Voleibol';
+
+    const supaUrl = localStorage.getItem('control_voley_supa_url') || '';
+    const supaKey = localStorage.getItem('control_voley_supa_key') || '';
+
+    if (supaUrl && supaKey) {
+        supabaseClub = createClient(supaUrl, supaKey);
+        return true;
+    }
+
+    supabaseClub = null;
+    return false;
+}
+
+async function cargarDesdeSupabase() {
+    if (!supabaseClub || !empresaIdActual) {
+        actualizarEstadoSync('Modo local activo', 'text-amber-300');
+        return;
+    }
+
+    try {
+        actualizarEstadoSync('Cargando torneo...', 'text-cyan-300');
+
+        const { data, error } = await supabaseClub
+            .from(TABLA_TORNEOS)
+            .select('estado_torneo')
+            .eq('id', empresaIdActual)
+            .maybeSingle();
+
+        if (error) throw error;
+
+        if (data && data.estado_torneo && typeof data.estado_torneo === 'object') {
+            const nube = data.estado_torneo;
+            estado = {
+                ...estadoInicial(),
+                ...nube,
+                equipos: Array.isArray(nube.equipos) ? nube.equipos : [],
+                categoriasData: nube.categoriasData && typeof nube.categoriasData === 'object'
+                    ? nube.categoriasData
+                    : estadoInicial().categoriasData
+            };
+            asegurarCategoria(estado.categoriaActiva);
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(estado));
+            renderTodo();
+            actualizarEstadoSync('Sincronizado con Supabase', 'text-emerald-300');
+        } else {
+            await guardarEnSupabase();
+        }
+    } catch (err) {
+        console.error('Error al cargar desde Supabase:', err);
+        actualizarEstadoSync('Respaldo local activo', 'text-amber-300');
+    }
+}
+
+async function guardarEnSupabase() {
+    if (!supabaseClub || !empresaIdActual) {
+        actualizarEstadoSync('Guardado en dispositivo', 'text-slate-300');
+        return;
+    }
+
+    try {
+        actualizarEstadoSync('Guardando...', 'text-cyan-300');
+
+        const { error } = await supabaseClub
+            .from(TABLA_TORNEOS)
+            .upsert(
+                {
+                    id: empresaIdActual,
+                    empresa_id: empresaIdActual,
+                    organizacion_nombre: nombreOrgActual,
+                    estado_torneo: estado,
+                    actualizado_en: new Date().toISOString()
+                },
+                { onConflict: 'id' }
+            );
+
+        if (error) throw error;
+        actualizarEstadoSync('Guardado en Supabase', 'text-emerald-300');
+    } catch (err) {
+        console.error('Error al guardar en Supabase:', err);
+        actualizarEstadoSync('Error nube (guardado local)', 'text-red-300');
     }
 }
 
 function guardarEstado() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(estado));
     actualizarBadges();
+
+    clearTimeout(temporizadorSync);
+    temporizadorSync = setTimeout(() => {
+        guardarEnSupabase();
+    }, 250);
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-    const orgNombre =
-        localStorage.getItem('control_voley_club_nombre') ||
-        localStorage.getItem('youcontrol_empresa_id') ||
-        'Organización de Voleibol';
+document.addEventListener('DOMContentLoaded', async () => {
+    inicializarSupabaseClub();
 
-    document.getElementById('orgHeaderInfo').textContent =
-        `${orgNombre} • Máx. 3 Sets (Gana el primero en 2)`;
+    const orgHeader = document.getElementById('orgHeaderInfo');
+    if (orgHeader) {
+        orgHeader.innerHTML = `${nombreOrgActual} • Máx. 3 Sets (Gana 2) • <span id="syncStatusTexto" class="text-[11px] font-bold text-slate-300">Iniciando...</span>`;
+    }
 
     const formEquipo = document.getElementById('formEquipo');
     if (formEquipo) {
         formEquipo.addEventListener('submit', (e) => {
             e.preventDefault();
+            const catEquipo = asegurarCategoria(document.getElementById('categoriaEquipo').value);
             const nuevoEquipo = {
                 id: 'eq_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
                 club: document.getElementById('clubNombre').value.trim(),
-                categoria: document.getElementById('categoriaEquipo').value.trim(),
+                categoria: catEquipo,
                 division: document.getElementById('divisionEquipo').value.trim(),
                 rama: document.getElementById('ramaEquipo').value
             };
 
             estado.equipos.push(nuevoEquipo);
+            estado.categoriaActiva = catEquipo;
             guardarEstado();
             e.target.reset();
-            renderEquipos();
+            renderTodo();
         });
     }
 
@@ -66,11 +219,59 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    renderEquipos();
-    renderGruposYEstadistica();
-    renderEliminatorias();
-    actualizarBadges();
+    renderTodo();
+    await cargarDesdeSupabase();
 });
+
+function obtenerListaCategoriasDisponibles() {
+    const setCats = new Set(Object.keys(estado.categoriasData || {}));
+    estado.equipos.forEach((eq) => {
+        if (eq.categoria) setCats.add(eq.categoria.trim());
+    });
+    if (setCats.size === 0) setCats.add('Libre');
+    return Array.from(setCats);
+}
+
+function renderSelectorCategorias() {
+    const select = document.getElementById('categoriaActivaSelect');
+    if (!select) return;
+
+    const cats = obtenerListaCategoriasDisponibles();
+    const activa = asegurarCategoria(estado.categoriaActiva);
+
+    select.innerHTML = cats
+        .map((cat) => `<option value="${cat}" ${cat === activa ? 'selected' : ''}>${cat}</option>`)
+        .join('');
+}
+
+function cambiarCategoriaActiva(nuevaCat) {
+    estado.categoriaActiva = asegurarCategoria(nuevaCat);
+    guardarEstado();
+    renderTodo();
+}
+
+function actualizarDatosTorneo() {
+    const input = document.getElementById('nombreTorneoInput');
+    if (input) {
+        estado.nombreTorneo = input.value.trim() || 'Torneo Oficial de Voleibol';
+        guardarEstado();
+    }
+}
+
+function actualizarReglaCategoria() {
+    const catData = obtenerDatosCategoriaActiva();
+    catData.diasJuego = document.getElementById('diasJuegoCategoria')?.value.trim() || '';
+    catData.condiciones = document.getElementById('condicionesCategoria')?.value.trim() || '';
+    guardarEstado();
+}
+
+function actualizarCantidadGruposInput(valor) {
+    const catData = obtenerDatosCategoriaActiva();
+    const num = parseInt(valor, 10);
+    catData.cantidadGrupos = Number.isNaN(num) || num < 1 ? 1 : Math.min(num, 20);
+    guardarEstado();
+    renderResumenGruposCategoria();
+}
 
 function cambiarVista(vista) {
     ['equipos', 'grupos', 'eliminatorias'].forEach((v) => {
@@ -85,35 +286,67 @@ function cambiarVista(vista) {
         }
     });
 
-    if (vista === 'grupos') renderGruposYEstadistica();
-    if (vista === 'eliminatorias') renderEliminatorias();
+    renderTodo();
+}
+
+function obtenerEquiposDeCategoriaFiltrados() {
+    const catActiva = asegurarCategoria(estado.categoriaActiva);
+    const filtroRama = document.getElementById('filtroRama')?.value || 'TODAS';
+
+    return estado.equipos.filter((eq) => {
+        const mismaCat = (eq.categoria || 'Libre').trim() === catActiva;
+        const mismaRama = filtroRama === 'TODAS' || eq.rama === filtroRama;
+        return mismaCat && mismaRama;
+    });
 }
 
 function actualizarBadges() {
-    document.getElementById('badgeEquipos').textContent = estado.equipos.length;
-    const totalPartidosGrupo = estado.grupos.reduce((acc, g) => acc + g.partidos.length, 0);
+    const catData = obtenerDatosCategoriaActiva();
+    const equiposCat = obtenerEquiposDeCategoriaFiltrados();
+
+    document.getElementById('badgeEquipos').textContent = equiposCat.length;
+    const totalPartidosGrupo = (catData.grupos || []).reduce((acc, g) => acc + g.partidos.length, 0);
     document.getElementById('badgePartidosGrupo').textContent = totalPartidosGrupo;
-    document.getElementById('badgeRondaActual').textContent = estado.eliminatoria.rondaActual || 'Pendiente';
+    document.getElementById('badgeRondaActual').textContent = catData.eliminatoria?.rondaActual || 'Pendiente';
 }
 
 function eliminarEquipo(id) {
     estado.equipos = estado.equipos.filter((eq) => eq.id !== id);
     guardarEstado();
-    renderEquipos();
+    renderTodo();
+}
+
+function renderResumenGruposCategoria() {
+    const catActiva = asegurarCategoria(estado.categoriaActiva);
+    const catData = obtenerDatosCategoriaActiva();
+    const equiposCat = obtenerEquiposDeCategoriaFiltrados();
+    const inputGrupos = document.getElementById('cantidadGrupos');
+    const resumen = document.getElementById('resumenGruposSugeridos');
+
+    if (inputGrupos) {
+        inputGrupos.value = catData.cantidadGrupos || 2;
+    }
+
+    if (resumen) {
+        const gruposEfectivos = Math.min(catData.cantidadGrupos || 1, Math.max(equiposCat.length, 1));
+        resumen.textContent = equiposCat.length > 0
+            ? `En ${catActiva} hay ${equiposCat.length} equipo(s) → se formarán ${gruposEfectivos} grupo(s) al generar.`
+            : `Registra equipos en ${catActiva} para armar sus grupos.`;
+    }
 }
 
 function renderEquipos() {
-    const filtroRama = document.getElementById('filtroRama').value;
-    const filtrados =
-        filtroRama === 'TODAS'
-            ? estado.equipos
-            : estado.equipos.filter((eq) => eq.rama === filtroRama);
+    const catActiva = asegurarCategoria(estado.categoriaActiva);
+    const filtrados = obtenerEquiposDeCategoriaFiltrados();
 
+    document.getElementById('tituloCategoriaEquipos').textContent = catActiva;
     document.getElementById('totalEquiposTexto').textContent = filtrados.length;
+    renderResumenGruposCategoria();
+
     const tbody = document.getElementById('tablaEquiposBody');
 
     if (filtrados.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="6" class="py-8 text-center text-slate-400 font-bold">No hay equipos registrados con este filtro.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="6" class="py-8 text-center text-slate-400 font-bold">No hay equipos registrados en ${catActiva} con este filtro.</td></tr>`;
         return;
     }
 
@@ -141,20 +374,19 @@ function renderEquipos() {
         .join('');
 }
 
-function generarFaseGrupos() {
-    const filtroRama = document.getElementById('filtroRama').value;
-    const poolEquipos =
-        filtroRama === 'TODAS'
-            ? [...estado.equipos]
-            : estado.equipos.filter((eq) => eq.rama === filtroRama);
+function generarFaseGruposCategoria() {
+    const catActiva = asegurarCategoria(estado.categoriaActiva);
+    const catData = obtenerDatosCategoriaActiva();
+    const poolEquipos = obtenerEquiposDeCategoriaFiltrados();
 
     if (poolEquipos.length < 2) {
-        alert('Necesitas al menos 2 equipos registrados para programar la fase de grupos.');
+        alert(`Necesitas al menos 2 equipos en la categoría "${catActiva}" para generar grupos.`);
         return;
     }
 
-    let numGrupos = parseInt(document.getElementById('cantidadGrupos').value, 10) || 1;
-    numGrupos = Math.min(numGrupos, poolEquipos.length);
+    let numGrupos = parseInt(document.getElementById('cantidadGrupos').value, 10) || catData.cantidadGrupos || 1;
+    numGrupos = Math.min(Math.max(numGrupos, 1), poolEquipos.length);
+    catData.cantidadGrupos = numGrupos;
 
     const letras = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
     const gruposTemp = Array.from({ length: numGrupos }, (_, i) => ({
@@ -174,7 +406,7 @@ function generarFaseGrupos() {
         for (let i = 0; i < ids.length; i++) {
             for (let j = i + 1; j < ids.length; j++) {
                 grupo.partidos.push({
-                    id: `grp_${gIdx}_p_${i}_${j}`,
+                    id: `grp_${catActiva}_${gIdx}_p_${i}_${j}`,
                     jornada: jornadaNum++,
                     eqA: ids[i],
                     eqB: ids[j],
@@ -193,9 +425,9 @@ function generarFaseGrupos() {
         }
     });
 
-    estado.grupos = gruposTemp;
+    catData.grupos = gruposTemp;
     guardarEstado();
-    renderGruposYEstadistica();
+    renderTodo();
     cambiarVista('grupos');
 }
 
@@ -204,7 +436,7 @@ function obtenerEquipoPorId(id) {
         estado.equipos.find((e) => e.id === id) || {
             id,
             club: 'Equipo eliminado',
-            categoria: '-',
+            categoria: estado.categoriaActiva,
             division: '-',
             rama: '-'
         }
@@ -240,7 +472,8 @@ function evaluarSetsPartido(setsRaw) {
 }
 
 function actualizarSetGrupo(grupoIdx, partidoIdx, setIdx, lado, valor) {
-    const partido = estado.grupos[grupoIdx].partidos[partidoIdx];
+    const catData = obtenerDatosCategoriaActiva();
+    const partido = catData.grupos[grupoIdx].partidos[partidoIdx];
     partido.sets[setIdx][lado] = valor;
 
     const evalRes = evaluarSetsPartido(partido.sets);
@@ -257,10 +490,12 @@ function actualizarSetGrupo(grupoIdx, partidoIdx, setIdx, lado, valor) {
     renderGruposYEstadistica();
 }
 
-function calcularClasificacionGeneral() {
+function calcularClasificacionCategoria() {
+    const catData = obtenerDatosCategoriaActiva();
+    const poolEquipos = obtenerEquiposDeCategoriaFiltrados();
     const statsMap = {};
 
-    estado.equipos.forEach((eq) => {
+    poolEquipos.forEach((eq) => {
         statsMap[eq.id] = {
             equipo: eq,
             grupoNombre: '-',
@@ -275,7 +510,7 @@ function calcularClasificacionGeneral() {
         };
     });
 
-    estado.grupos.forEach((grupo) => {
+    (catData.grupos || []).forEach((grupo) => {
         grupo.equiposIds.forEach((id) => {
             if (statsMap[id]) statsMap[id].grupoNombre = grupo.nombre;
         });
@@ -325,17 +560,22 @@ function calcularClasificacionGeneral() {
 }
 
 function renderGruposYEstadistica() {
+    const catActiva = asegurarCategoria(estado.categoriaActiva);
+    const catData = obtenerDatosCategoriaActiva();
     const cont = document.getElementById('contenedorGrupos');
 
-    if (estado.grupos.length === 0) {
+    document.getElementById('etiquetaCatGrupos').textContent = `Categoría: ${catActiva}`;
+    document.getElementById('tituloCatTabla').textContent = catActiva;
+
+    if (!catData.grupos || catData.grupos.length === 0) {
         cont.innerHTML = `
             <div class="bg-white rounded-3xl border border-slate-200 p-8 text-center space-y-2">
-                <p class="text-sm font-black text-slate-700">Aún no se ha generado la fase de grupos</p>
-                <p class="text-xs text-slate-500">Ve a <strong>1. Registro de Equipos</strong>, indica la cantidad de grupos y presiona <strong>Generar Grupos y Calendario</strong>.</p>
+                <p class="text-sm font-black text-slate-700">Aún no se han generado los grupos de ${catActiva}</p>
+                <p class="text-xs text-slate-500">Ve a <strong>1. Registro de Equipos</strong>, indica cuántos grupos tendrá <strong>${catActiva}</strong> y presiona <strong>Generar Grupos de la Categoría</strong>.</p>
             </div>
         `;
     } else {
-        cont.innerHTML = estado.grupos
+        cont.innerHTML = catData.grupos
             .map((grupo, gIdx) => {
                 const partidosHtml = grupo.partidos
                     .map((p, pIdx) => {
@@ -395,7 +635,7 @@ function renderGruposYEstadistica() {
                 return `
                     <div class="bg-white rounded-3xl border border-slate-200 p-6 shadow-glass space-y-4">
                         <div class="flex items-center justify-between border-b border-slate-100 pb-3">
-                            <h3 class="text-base font-black uppercase text-brand-electric">${grupo.nombre}</h3>
+                            <h3 class="text-base font-black uppercase text-brand-electric">${grupo.nombre} • ${catActiva}</h3>
                             <span class="text-xs font-bold text-slate-500">${grupo.equiposIds.length} equipos • ${grupo.partidos.length} partidos</span>
                         </div>
                         <div class="space-y-3">${partidosHtml}</div>
@@ -405,7 +645,7 @@ function renderGruposYEstadistica() {
             .join('');
     }
 
-    const ranking = calcularClasificacionGeneral();
+    const ranking = calcularClasificacionCategoria();
     const tbody = document.getElementById('tablaEstadisticaBody');
     tbody.innerHTML = ranking
         .map(
@@ -418,7 +658,7 @@ function renderGruposYEstadistica() {
             </td>
             <td class="py-3 px-3 text-slate-900 font-black">${row.equipo.club}</td>
             <td class="py-3 px-2 text-slate-600">${row.grupoNombre}</td>
-            <td class="py-3 px-2 text-[11px] text-slate-500">${row.equipo.rama} • ${row.equipo.categoria} • ${row.equipo.division}</td>
+            <td class="py-3 px-2 text-[11px] text-slate-500">${row.equipo.rama} • ${row.equipo.division}</td>
             <td class="py-3 px-2 text-center">${row.pj}</td>
             <td class="py-3 px-2 text-center text-emerald-600">${row.pg}</td>
             <td class="py-3 px-2 text-center text-red-500">${row.pp}</td>
@@ -432,11 +672,12 @@ function renderGruposYEstadistica() {
 }
 
 function solicitarPaseEliminatoria(tamanoLlave) {
+    const catActiva = asegurarCategoria(estado.categoriaActiva);
     rondaPendienteConfirmar = tamanoLlave;
     const nombreRonda = tamanoLlave === 16 ? '16vos de Final' : '8vos de Final';
-    document.getElementById('modalElimTitulo').textContent = `¿Pasar a ${nombreRonda}?`;
+    document.getElementById('modalElimTitulo').textContent = `¿Pasar ${catActiva} a ${nombreRonda}?`;
     document.getElementById('modalElimTexto').innerHTML = `
-        Se tomarán los <strong>${tamanoLlave} mejores equipos</strong> según su <strong>porcentaje (%) y estadística</strong> en la ronda clasificatoria, emparejando el <strong>#1 contra el #${tamanoLlave}</strong>, el <strong>#2 contra el #${tamanoLlave - 1}</strong> y así sucesivamente. ¿Deseas generar esta ronda ahora?
+        Se tomarán hasta <strong>${tamanoLlave} mejores equipos</strong> de <strong>${catActiva}</strong> según su <strong>porcentaje (%) y estadística</strong>, emparejando el <strong>#1 contra el peor</strong>, el <strong>#2 contra el penúltimo</strong> y así sucesivamente. ¿Generar cruces ahora?
     `;
     const modal = document.getElementById('modalEliminatoria');
     modal.classList.remove('hidden');
@@ -478,9 +719,11 @@ function emparejarMejorContraPeor(listaOrdenada, rondaEtiqueta) {
 }
 
 function generarEliminatoriaDesdeEstadistica(tamanoLlave) {
-    const ranking = calcularClasificacionGeneral();
+    const catData = obtenerDatosCategoriaActiva();
+    const ranking = calcularClasificacionCategoria();
+
     if (ranking.length < 2) {
-        alert('Se requieren al menos 2 equipos para iniciar eliminatorias.');
+        alert('Se requieren al menos 2 equipos en la categoría para iniciar eliminatorias.');
         return;
     }
 
@@ -493,19 +736,20 @@ function generarEliminatoriaDesdeEstadistica(tamanoLlave) {
     else if (tamanoLlave === 4) etiqueta = '4tos';
     else if (tamanoLlave === 2) etiqueta = 'Final';
 
-    estado.eliminatoria = {
+    catData.eliminatoria = {
         rondaActual: etiqueta,
         partidos: emparejarMejorContraPeor(seleccionados, etiqueta),
         campeon: null
     };
 
     guardarEstado();
-    renderEliminatorias();
+    renderTodo();
     cambiarVista('eliminatorias');
 }
 
 function actualizarSetElim(partidoIdx, setIdx, lado, valor) {
-    const partido = estado.eliminatoria.partidos[partidoIdx];
+    const catData = obtenerDatosCategoriaActiva();
+    const partido = catData.eliminatoria.partidos[partidoIdx];
     partido.sets[setIdx][lado] = valor;
 
     const evalRes = evaluarSetsPartido(partido.sets);
@@ -521,7 +765,8 @@ function actualizarSetElim(partidoIdx, setIdx, lado, valor) {
 }
 
 function avanzarSiguienteRondaElim() {
-    const elim = estado.eliminatoria;
+    const catData = obtenerDatosCategoriaActiva();
+    const elim = catData.eliminatoria;
     const todosResueltos = elim.partidos.length > 0 && elim.partidos.every((p) => p.ganadorId !== null);
 
     if (!todosResueltos) {
@@ -552,7 +797,9 @@ function avanzarSiguienteRondaElim() {
 }
 
 function renderEliminatorias() {
-    const elim = estado.eliminatoria;
+    const catActiva = asegurarCategoria(estado.categoriaActiva);
+    const catData = obtenerDatosCategoriaActiva();
+    const elim = catData.eliminatoria || { rondaActual: null, partidos: [], campeon: null };
     const cont = document.getElementById('contenedorEliminatorias');
     const btnAvanzar = document.getElementById('btnAvanzarSiguienteRonda');
     const bannerCampeon = document.getElementById('campeonBanner');
@@ -566,13 +813,14 @@ function renderEliminatorias() {
         Campeon: 'Torneo Finalizado'
     };
 
+    document.getElementById('etiquetaRondaElim').textContent = `Categoría: ${catActiva}`;
     document.getElementById('tituloRondaElim').textContent = elim.rondaActual
-        ? nombresRondas[elim.rondaActual] || elim.rondaActual
-        : 'Sin ronda eliminatoria iniciada';
+        ? `${nombresRondas[elim.rondaActual] || elim.rondaActual} • ${catActiva}`
+        : `Sin ronda eliminatoria iniciada en ${catActiva}`;
 
     bannerCampeon.classList.toggle('hidden', elim.rondaActual !== 'Campeon' || !elim.campeon);
     if (elim.campeon) {
-        document.getElementById('nombreCampeon').textContent = elim.campeon.club;
+        document.getElementById('nombreCampeon').textContent = `${elim.campeon.club} (${catActiva})`;
     }
 
     const todosListos = elim.partidos.length > 0 && elim.partidos.every((p) => p.ganadorId !== null);
@@ -587,7 +835,7 @@ function renderEliminatorias() {
     if (!elim.partidos || elim.partidos.length === 0) {
         cont.innerHTML = `
             <div class="md:col-span-2 bg-white rounded-3xl border border-slate-200 p-8 text-center space-y-2">
-                <p class="text-sm font-black text-slate-700">No hay llaves eliminatorias generadas</p>
+                <p class="text-sm font-black text-slate-700">No hay llaves eliminatorias generadas para ${catActiva}</p>
                 <p class="text-xs text-slate-500">Usa los botones de <strong>Iniciar desde 16vos</strong> o <strong>Iniciar desde 8vos</strong> para emparejar el mejor equipo contra el peor según estadística.</p>
             </div>
         `;
@@ -664,13 +912,42 @@ function renderEliminatorias() {
         .join('');
 }
 
+function renderTodo() {
+    const catData = obtenerDatosCategoriaActiva();
+    const inputTorneo = document.getElementById('nombreTorneoInput');
+    const inputDias = document.getElementById('diasJuegoCategoria');
+    const inputCond = document.getElementById('condicionesCategoria');
+
+    if (inputTorneo) inputTorneo.value = estado.nombreTorneo || '';
+    if (inputDias) inputDias.value = catData.diasJuego || '';
+    if (inputCond) inputCond.value = catData.condiciones || '';
+
+    renderSelectorCategorias();
+    renderEquipos();
+    renderGruposYEstadistica();
+    renderEliminatorias();
+    actualizarBadges();
+}
+
 function resetearTorneoCompleto() {
     if (confirm('¿Deseas borrar el torneo actual y empezar uno nuevo en Match Control?')) {
         estado = estadoInicial();
         guardarEstado();
-        renderEquipos();
-        renderGruposYEstadistica();
-        renderEliminatorias();
+        renderTodo();
         cambiarVista('equipos');
     }
 }
+
+window.cambiarVista = cambiarVista;
+window.cambiarCategoriaActiva = cambiarCategoriaActiva;
+window.actualizarDatosTorneo = actualizarDatosTorneo;
+window.actualizarReglaCategoria = actualizarReglaCategoria;
+window.actualizarCantidadGruposInput = actualizarCantidadGruposInput;
+window.eliminarEquipo = eliminarEquipo;
+window.generarFaseGruposCategoria = generarFaseGruposCategoria;
+window.actualizarSetGrupo = actualizarSetGrupo;
+window.solicitarPaseEliminatoria = solicitarPaseEliminatoria;
+window.cerrarModalElim = cerrarModalElim;
+window.actualizarSetElim = actualizarSetElim;
+window.avanzarSiguienteRondaElim = avanzarSiguienteRondaElim;
+window.resetearTorneoCompleto = resetearTorneoCompleto;
