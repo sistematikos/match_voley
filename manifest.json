@@ -1,6 +1,6 @@
 {
-  "name": "Match Control - Torneos y Ligas de Voleibol",
-  "short_name": "Match Control",
+  "name": "Match Control - Torneos y Ligas",
+  "short_name": "MatchControl",
   "description": "Sistema exclusivo para organización de torneos y ligas de voleibol",
   "start_url": "./index.html",
   "scope": "./",
