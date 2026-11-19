@@ -1,9 +1,9 @@
-const CACHE_NAME = 'match-control-voley-v1';
+const CACHE_NAME = 'match-control-voley-v2';
 const assetsToCache = [
   './',
   './index.html',
   './dashboard.html',
-  './security.ofs.js',
+  './security.js',
   './app.ofs.js',
   './manifest.json',
   './img/logo.png'
