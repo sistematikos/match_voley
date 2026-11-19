@@ -2,7 +2,6 @@
 // MATCH CONTROL - ESCUDO DE SEGURIDAD Y BLOQUEO
 // ==========================================
 
-// Determina si la página actual es la pantalla de activación (index.html)
 function esPantallaActivacion() {
     const path = (window.location.pathname || '').toLowerCase();
     return path === '/' || path.endsWith('/') || path.endsWith('/index.html') || path === 'index.html';
@@ -23,7 +22,7 @@ function renderBloqueoWeb() {
                 <div style="font-size: 40px; margin-bottom: 15px;">🏐🔒</div>
                 <h2 style="font-size: 20px; font-weight: 900; margin-bottom: 10px; color: #00D2FF;">Acceso Restringido por Web</h2>
                 <p style="font-size: 13px; color: #94A3B8; line-height: 1.5; margin-bottom: 20px;">
-                    Por seguridad, <b>Match Control</b> requiere estar instalada como acceso directo en tu dispositivo. No se permite abrirla desde el navegador web.
+                    Por seguridad, <b>Match Control</b> requiere estar instalada como acceso directo en tu dispositivo. No se permite el acceso directo desde el navegador web.
                 </p>
                 <div style="background: rgba(0, 85, 255, 0.15); border: 1px solid rgba(0, 85, 255, 0.3); padding: 15px; border-radius: 16px; font-size: 12px; color: #E2E8F0; text-align: left;">
                     <b>Cómo instalarla:</b><br>
@@ -35,7 +34,7 @@ function renderBloqueoWeb() {
     `;
 }
 
-// 0. Bloqueo de acceso web directo SOLO en pantallas internas (NO en index.html)
+// 0. Bloqueo de acceso web directo en pantallas internas (NO en index.html)
 (function () {
     if (esPantallaActivacion()) return;
 
@@ -69,7 +68,7 @@ document.addEventListener('keydown', function (e) {
     }
 });
 
-// 2. Bloqueo del Clic Derecho (permitido en INPUT y TEXTAREA para pegar el serial)
+// 2. Bloqueo del Clic Derecho (excepto en INPUT y TEXTAREA para facilitar pegar el serial)
 document.addEventListener('contextmenu', function (event) {
     if (event.target && (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA')) {
         return true;
@@ -78,7 +77,7 @@ document.addEventListener('contextmenu', function (event) {
     return false;
 });
 
-// 3. Validación de sesión/serial en pantallas internas
+// 3. Validación de sesión activa en pantallas internas
 document.addEventListener('DOMContentLoaded', function () {
     if (esPantallaActivacion()) return;
 
