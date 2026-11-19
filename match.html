@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Match Control | Calendario, Grupos y Eliminatorias</title>
+    <title>Match Control | Torneos y Ligas de Voleibol</title>
     <link rel="manifest" href="manifest.json">
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800;900&display=swap" rel="stylesheet">
@@ -11,20 +11,6 @@
 
     <!-- ESCUDO DE SEGURIDAD GLOBAL -->
     <script src="security.js"></script>
-
-    <!-- GUARDIA ESTRICTA DE LICENCIA Y ACCESO DIRECTO -->
-    <script>
-        (function() {
-            const esLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-            const esStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
-            const empresaID = localStorage.getItem('youcontrol_empresa_id');
-            const licenciaValidada = localStorage.getItem('licencia_validada');
-
-            if ((!esStandalone && !esLocal) || !empresaID || licenciaValidada !== 'true') {
-                window.location.replace('index.html');
-            }
-        })();
-    </script>
 
     <script>
         tailwind.config = {
@@ -51,7 +37,6 @@
 </head>
 <body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
 
-    <!-- CABECERA MATCH CONTROL -->
     <header class="bg-brand-dark text-white px-4 md:px-8 py-4 shadow-lg sticky top-0 z-30">
         <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4">
             <div class="flex items-center gap-3">
@@ -63,7 +48,7 @@
                         <h1 class="font-black text-base md:text-lg uppercase tracking-tight">Match Control</h1>
                         <span class="text-[10px] font-black bg-brand-orange px-2 py-0.5 rounded-full uppercase">Torneos y Ligas</span>
                     </div>
-                    <p id="orgHeaderInfo" class="text-xs text-slate-300 font-semibold">Organización Activa • Max. 3 Sets (Gana 2)</p>
+                    <p id="orgHeaderInfo" class="text-xs text-slate-300 font-semibold">Organización Activa • Máx. 3 Sets (Gana 2)</p>
                 </div>
             </div>
 
@@ -77,7 +62,6 @@
 
     <main class="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 space-y-6">
 
-        <!-- BARRA DE NAVEGACIÓN DE ETAPAS -->
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
             <button id="tab-equipos" onclick="cambiarVista('equipos')" class="p-4 rounded-2xl bg-brand-electric text-white font-black text-xs uppercase tracking-wider flex items-center justify-between shadow-electric transition cursor-pointer">
                 <span><i class="fas fa-users-gear mr-2"></i> 1. Registro de Equipos</span>
@@ -93,9 +77,7 @@
             </button>
         </div>
 
-        <!-- ========================================================= -->
-        <!-- SECCIÓN 1: REGISTRO DE EQUIPOS                           -->
-        <!-- ========================================================= -->
+        <!-- 1. REGISTRO DE EQUIPOS -->
         <section id="vista-equipos" class="space-y-6">
             <div class="bg-white rounded-3xl border border-slate-200 p-6 shadow-glass">
                 <div class="flex flex-wrap items-center justify-between gap-2 mb-5">
@@ -156,7 +138,6 @@
                 </form>
             </div>
 
-            <!-- LISTADO DE EQUIPOS REGISTRADOS -->
             <div class="bg-white rounded-3xl border border-slate-200 p-6 shadow-glass space-y-4">
                 <div class="flex flex-wrap items-center justify-between gap-4">
                     <h3 class="text-sm font-black uppercase tracking-wider text-slate-800">
@@ -199,9 +180,7 @@
             </div>
         </section>
 
-        <!-- ========================================================= -->
-        <!-- SECCIÓN 2: FASE DE GRUPOS, CALENDARIO Y ESTADÍSTICA       -->
-        <!-- ========================================================= -->
+        <!-- 2. FASE DE GRUPOS Y ESTADÍSTICA -->
         <section id="vista-grupos" class="hidden space-y-6">
             <div class="bg-gradient-to-r from-brand-dark to-slate-900 text-white rounded-3xl p-6 shadow-xl flex flex-wrap items-center justify-between gap-4">
                 <div>
@@ -254,9 +233,7 @@
             </div>
         </section>
 
-        <!-- ========================================================= -->
-        <!-- SECCIÓN 3: RONDAS ELIMINATORIAS                          -->
-        <!-- ========================================================= -->
+        <!-- 3. RONDAS ELIMINATORIAS -->
         <section id="vista-eliminatorias" class="hidden space-y-6">
             <div class="bg-white rounded-3xl border border-slate-200 p-6 shadow-glass flex flex-wrap items-center justify-between gap-4">
                 <div>
@@ -309,7 +286,6 @@
         </div>
     </div>
 
-    <!-- LÓGICA DE MATCH CONTROL -->
     <script src="match.js"></script>
 </body>
 </html>
