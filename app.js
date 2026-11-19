@@ -7,6 +7,110 @@ const RUTA_SISTEMA = "match.html";
 const supabaseMaster = createClient(MASTER_SUPA_URL, MASTER_SUPA_KEY);
 const getHardwareID = () => btoa(navigator.userAgent + navigator.language);
 
+function esStandaloneActual() {
+    return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+}
+
+function esEntornoLocal() {
+    return window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+}
+
+function esDispositivoIos() {
+    return /iphone|ipad|ipod/.test(navigator.userAgent.toLowerCase());
+}
+
+function abrirVentanaInstalacion() {
+    const modal = document.getElementById('modalInstalacion');
+    const bloqueIos = document.getElementById('bloqueInstalarIos');
+    const bloqueAndroidPc = document.getElementById('bloqueInstalarAndroidPc');
+    const estadoModal = document.getElementById('estadoModalInstalar');
+
+    if (!modal) return;
+
+    if (esDispositivoIos()) {
+        bloqueIos?.classList.remove('hidden');
+        bloqueAndroidPc?.classList.add('hidden');
+    } else {
+        bloqueIos?.classList.add('hidden');
+        bloqueAndroidPc?.classList.remove('hidden');
+    }
+
+    if (estadoModal) {
+        estadoModal.className = "text-xs font-bold text-center text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl p-2.5";
+        estadoModal.innerText = "Serial validado. Instala la aplicación para continuar a Match Control.";
+    }
+
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+}
+
+function cerrarVentanaInstalacion() {
+    const modal = document.getElementById('modalInstalacion');
+    if (modal) {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+    }
+}
+
+document.getElementById('btnCerrarModalInstalar')?.addEventListener('click', cerrarVentanaInstalacion);
+
+// Al pulsar "Instalar Aplicación Ahora" dentro de la ventana flotante
+document.getElementById('btnConfirmarInstalacionPWA')?.addEventListener('click', async () => {
+    const estadoModal = document.getElementById('estadoModalInstalar');
+
+    if (window.deferredPrompt) {
+        if (estadoModal) {
+            estadoModal.className = "text-xs font-bold text-center text-amber-700 bg-amber-50 border border-amber-200 rounded-xl p-2.5";
+            estadoModal.innerText = "Mostrando solicitud de instalación...";
+        }
+
+        window.deferredPrompt.prompt();
+        const userChoice = await window.deferredPrompt.userChoice;
+        window.deferredPrompt = null;
+
+        if (userChoice.outcome === 'accepted') {
+            if (estadoModal) {
+                estadoModal.className = "text-xs font-bold text-center text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl p-2.5";
+                estadoModal.innerText = "¡Instalación aceptada! Entrando a Match Control...";
+            }
+            setTimeout(() => window.location.replace(RUTA_SISTEMA), 400);
+        } else {
+            if (estadoModal) {
+                estadoModal.className = "text-xs font-bold text-center text-red-600 bg-red-50 border border-red-200 rounded-xl p-2.5";
+                estadoModal.innerText = "Debes aceptar la instalación para usar el acceso directo.";
+            }
+        }
+    } else if (esStandaloneActual() || esEntornoLocal()) {
+        window.location.replace(RUTA_SISTEMA);
+    } else {
+        if (estadoModal) {
+            estadoModal.className = "text-xs font-bold text-center text-blue-700 bg-blue-50 border border-blue-200 rounded-xl p-2.5";
+            estadoModal.innerText = "Usa el menú ⋮ del navegador para instalar Match Control y luego pulsa 'Entrar a Match Control'.";
+        }
+    }
+});
+
+// Botón "Entrar a Match Control" dentro de la ventana flotante
+document.getElementById('btnEntrarMatch')?.addEventListener('click', () => {
+    const estadoModal = document.getElementById('estadoModalInstalar');
+    const licenciaOk = localStorage.getItem('licencia_validada') === 'true';
+
+    if (!licenciaOk) {
+        if (estadoModal) {
+            estadoModal.className = "text-xs font-bold text-center text-red-600 bg-red-50 border border-red-200 rounded-xl p-2.5";
+            estadoModal.innerText = "Primero debes validar un serial correcto.";
+        }
+        return;
+    }
+
+    if (esStandaloneActual() || esEntornoLocal()) {
+        window.location.replace(RUTA_SISTEMA);
+    } else if (estadoModal) {
+        estadoModal.className = "text-xs font-bold text-center text-amber-800 bg-amber-50 border border-amber-200 rounded-xl p-2.5";
+        estadoModal.innerText = "Abre Match Control desde el acceso directo instalado en tu dispositivo.";
+    }
+});
+
 // 1. Botón de pegado automático directo
 const btnPegar = document.getElementById('btnPegarPortapapeles');
 if (btnPegar) {
@@ -18,25 +122,25 @@ if (btnPegar) {
                 const statusDiv = document.getElementById('statusMsg');
                 if (statusDiv) {
                     statusDiv.className = "text-xs font-bold text-emerald-600";
-                    statusDiv.innerText = "¡Serial pegado con éxito!";
+                    statusDiv.innerText = "¡Serial pegado! Ahora pulsa 'Validar Serial y Pedir Instalación'.";
                 }
             } else {
-                alert("Tu navegador no permite lectura automática. Mantén presionado el cuadro de texto.");
+                alert("Tu navegador no permite lectura automática. Mantén presionado el cuadro de texto para pegar.");
             }
         } catch (err) {
-            alert("No se pudo acceder al portapapeles. Mantén presionado el recuadro para pegar tu serial.");
+            alert("No se pudo acceder al portapapeles. Pega tu serial manualmente en el recuadro.");
         }
     });
 }
 
-// 2. Proceso de activación exclusivo por Serial de Licencia
+// 2. Validar serial y abrir ventana flotante de instalación
 async function procesarActivacionEInstalacion() {
     const rawToken = document.getElementById('tokenInput').value.trim();
     const statusDiv = document.getElementById('statusMsg');
     const btn = document.getElementById('btnActivarEInstalar');
 
     if (!rawToken) {
-        return alert("Por favor, pega el serial de licencia de Match Control primero.");
+        return alert("Por favor, pega el serial de licencia primero.");
     }
 
     btn.disabled = true;
@@ -58,7 +162,7 @@ async function procesarActivacionEInstalacion() {
             .single();
 
         if (empresaError || !empresaData) {
-            throw new Error("La licencia no existe en el sistema de Match Control.");
+            throw new Error("La licencia no existe en el sistema.");
         }
 
         if (empresaData.activa === false || empresaData.estado === 'suspendida') {
@@ -77,7 +181,7 @@ async function procesarActivacionEInstalacion() {
         if (!equiposLicencia.includes(hwID) && equiposLicencia.length >= limiteLicencia) {
             alert("Error: Se alcanzó el límite de dispositivos permitidos para este serial.");
             btn.disabled = false;
-            btn.innerHTML = `<i class="fas fa-download text-sm"></i> Activar Licencia e Instalar`;
+            btn.innerHTML = `<i class="fas fa-key text-sm"></i> Validar Serial y Pedir Instalación`;
             return;
         }
 
@@ -98,33 +202,20 @@ async function procesarActivacionEInstalacion() {
         localStorage.setItem('youcontrol_empresa_id', activationId);
         localStorage.setItem('licencia_validada', 'true');
 
-        if (window.deferredPrompt) {
-            if (statusDiv) {
-                statusDiv.className = "text-xs font-bold text-amber-600";
-                statusDiv.innerText = "Confirmando instalación de Match Control...";
-            }
+        if (statusDiv) {
+            statusDiv.className = "text-xs font-bold text-emerald-600";
+            statusDiv.innerText = "¡Serial correcto! Revisa la ventana para instalar Match Control.";
+        }
 
-            window.deferredPrompt.prompt();
-            const userChoice = await window.deferredPrompt.userChoice;
-            window.deferredPrompt = null;
+        btn.disabled = false;
+        btn.innerHTML = `<i class="fas fa-key text-sm"></i> Validar Serial y Pedir Instalación`;
 
-            if (userChoice.outcome === 'accepted') {
-                if (statusDiv) {
-                    statusDiv.className = "text-xs font-bold text-emerald-600";
-                    statusDiv.innerText = "¡Match Control instalado! Abriendo sistema...";
-                }
-                setTimeout(() => window.location.replace(RUTA_SISTEMA), 350);
-            } else {
-                alert("Debes instalar el acceso directo para usar Match Control.");
-                btn.disabled = false;
-                btn.innerHTML = `<i class="fas fa-download text-sm"></i> Activar Licencia e Instalar`;
-            }
-        } else {
-            if (statusDiv) {
-                statusDiv.className = "text-xs font-bold text-emerald-600";
-                statusDiv.innerText = "Serial correcto. Abriendo Match Control...";
-            }
+        // Si ya está corriendo como acceso directo instalado o en localhost, entra directo a match.html
+        if (esStandaloneActual() || esEntornoLocal()) {
             setTimeout(() => window.location.replace(RUTA_SISTEMA), 350);
+        } else {
+            // Si está en el navegador web normal, abre la ventana flotante pidiendo instalar
+            abrirVentanaInstalacion();
         }
 
     } catch (e) {
@@ -133,9 +224,9 @@ async function procesarActivacionEInstalacion() {
             statusDiv.className = "text-xs font-bold text-red-600";
             statusDiv.innerText = e.message;
         }
-        alert("No se pudo activar Match Control: " + e.message);
+        alert("Serial inválido: " + e.message);
         btn.disabled = false;
-        btn.innerHTML = `<i class="fas fa-download text-sm"></i> Activar Licencia e Instalar`;
+        btn.innerHTML = `<i class="fas fa-key text-sm"></i> Validar Serial y Pedir Instalación`;
     }
 }
 
