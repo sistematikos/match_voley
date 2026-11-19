@@ -2,35 +2,54 @@
 // MATCH CONTROL - ESCUDO DE SEGURIDAD Y BLOQUEO
 // ==========================================
 
-// 0. Bloqueo de acceso web directo (Exigir instalación PWA)
-(function() {
-    const esLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-    const esPwaInstalada = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+// Determina si la página actual es la pantalla de activación (index.html)
+function esPantallaActivacion() {
+    const path = (window.location.pathname || '').toLowerCase();
+    return path === '/' || path.endsWith('/') || path.endsWith('/index.html') || path === 'index.html';
+}
 
-    if (!esPwaInstalada && !esLocal) {
-        document.addEventListener("DOMContentLoaded", () => {
-            document.body.innerHTML = `
-                <div style="min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; background-color: #030B1E; color: white; font-family: 'Plus Jakarta Sans', sans-serif; text-align: center; padding: 20px;">
-                    <div style="max-width: 400px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); padding: 30px; border-radius: 24px; box-shadow: 0 20px 40px rgba(0,0,0,0.5);">
-                        <div style="font-size: 40px; margin-bottom: 15px;">🏐🔒</div>
-                        <h2 style="font-size: 20px; font-weight: 900; margin-bottom: 10px; color: #00D2FF;">Acceso Restringido por Web</h2>
-                        <p style="font-size: 13px; color: #94A3B8; line-height: 1.5; margin-bottom: 20px;">
-                            Por seguridad, <b>Match Control</b> requiere estar instalada como acceso directo en tu dispositivo. No se permite el acceso directo desde el navegador web.
-                        </p>
-                        <div style="background: rgba(0, 85, 255, 0.15); border: 1px solid rgba(0, 85, 255, 0.3); padding: 15px; border-radius: 16px; font-size: 12px; color: #E2E8F0; text-align: left;">
-                            <b>Cómo instalarla:</b><br>
-- <b>En iPhone (Safari):</b> Toca el botón <i>Compartir</i> ⎋ y selecciona <b>"Añadir a inicio"</b> ➕.<br><br>
-- <b>En Android / PC (Chrome):</b> Toca el menú de los 3 puntos ⋮ y selecciona <b>"Instalar aplicación"</b> o <b>"Añadir a la pantalla principal"</b>.
-                        </div>
-                    </div>
+function esEntornoLocal() {
+    return window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+}
+
+function esPwaStandalone() {
+    return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+}
+
+function renderBloqueoWeb() {
+    document.body.innerHTML = `
+        <div style="min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; background-color: #030B1E; color: white; font-family: 'Plus Jakarta Sans', sans-serif; text-align: center; padding: 20px;">
+            <div style="max-width: 400px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); padding: 30px; border-radius: 24px; box-shadow: 0 20px 40px rgba(0,0,0,0.5);">
+                <div style="font-size: 40px; margin-bottom: 15px;">🏐🔒</div>
+                <h2 style="font-size: 20px; font-weight: 900; margin-bottom: 10px; color: #00D2FF;">Acceso Restringido por Web</h2>
+                <p style="font-size: 13px; color: #94A3B8; line-height: 1.5; margin-bottom: 20px;">
+                    Por seguridad, <b>Match Control</b> requiere estar instalada como acceso directo en tu dispositivo. No se permite abrirla desde el navegador web.
+                </p>
+                <div style="background: rgba(0, 85, 255, 0.15); border: 1px solid rgba(0, 85, 255, 0.3); padding: 15px; border-radius: 16px; font-size: 12px; color: #E2E8F0; text-align: left;">
+                    <b>Cómo instalarla:</b><br>
+                    - <b>En iPhone (Safari):</b> Toca <i>Compartir</i> ⎋ y selecciona <b>"Añadir a inicio"</b> ➕.<br><br>
+                    - <b>En Android / PC (Chrome):</b> Toca los 3 puntos ⋮ y selecciona <b>"Instalar aplicación"</b> o <b>"Añadir a la pantalla principal"</b>.
                 </div>
-            `;
-        });
-        throw new Error("Acceso web no autorizado. Debe instalar la PWA.");
+            </div>
+        </div>
+    `;
+}
+
+// 0. Bloqueo de acceso web directo SOLO en pantallas internas (NO en index.html)
+(function () {
+    if (esPantallaActivacion()) return;
+
+    if (!esPwaStandalone() && !esEntornoLocal()) {
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', renderBloqueoWeb);
+        } else {
+            renderBloqueoWeb();
+        }
+        throw new Error('Acceso web no autorizado. Debe usar el acceso directo instalado.');
     }
 })();
 
-// 1. Bloqueo de atajos de teclado para Inspección (F12, Ctrl+Shift+I, Ctrl+U, etc.)
+// 1. Bloqueo de atajos de teclado para Inspección (F12, Ctrl+Shift+I, Ctrl+U, Ctrl+S)
 document.addEventListener('keydown', function (e) {
     if (e.key === 'F12' || e.keyCode === 123) {
         e.preventDefault();
@@ -50,22 +69,18 @@ document.addEventListener('keydown', function (e) {
     }
 });
 
-// 2. Bloqueo total del Clic Derecho (excepto en inputs de texto/textareas para facilitar el pegado)
-document.addEventListener('contextmenu', event => {
-    if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') {
+// 2. Bloqueo del Clic Derecho (permitido en INPUT y TEXTAREA para pegar el serial)
+document.addEventListener('contextmenu', function (event) {
+    if (event.target && (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA')) {
         return true;
     }
     event.preventDefault();
     return false;
 });
 
-// 3. Validación de sesión activa del sistema (Excluyendo la pantalla principal de activación)
-document.addEventListener('DOMContentLoaded', () => {
-    const path = window.location.pathname;
-
-    if (path.endsWith('/') || path.endsWith('/index.html') || path === 'index.html') {
-        return;
-    }
+// 3. Validación de sesión/serial en pantallas internas
+document.addEventListener('DOMContentLoaded', function () {
+    if (esPantallaActivacion()) return;
 
     const empresaID = localStorage.getItem('youcontrol_empresa_id');
     const licenciaValidada = localStorage.getItem('licencia_validada');
