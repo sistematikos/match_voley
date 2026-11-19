@@ -54,14 +54,13 @@ function cerrarVentanaInstalacion() {
 
 document.getElementById('btnCerrarModalInstalar')?.addEventListener('click', cerrarVentanaInstalacion);
 
-// Al pulsar "Instalar Aplicación Ahora" dentro de la ventana flotante
 document.getElementById('btnConfirmarInstalacionPWA')?.addEventListener('click', async () => {
     const estadoModal = document.getElementById('estadoModalInstalar');
 
     if (window.deferredPrompt) {
         if (estadoModal) {
             estadoModal.className = "text-xs font-bold text-center text-amber-700 bg-amber-50 border border-amber-200 rounded-xl p-2.5";
-            estadoModal.innerText = "Mostrando solicitud de instalación...";
+            estadoModal.innerText = "Confirmando instalación de Match Control...";
         }
 
         window.deferredPrompt.prompt();
@@ -71,13 +70,13 @@ document.getElementById('btnConfirmarInstalacionPWA')?.addEventListener('click',
         if (userChoice.outcome === 'accepted') {
             if (estadoModal) {
                 estadoModal.className = "text-xs font-bold text-center text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl p-2.5";
-                estadoModal.innerText = "¡Instalación aceptada! Entrando a Match Control...";
+                estadoModal.innerText = "¡Instalación completada! Entrando a Match Control...";
             }
-            setTimeout(() => window.location.replace(RUTA_SISTEMA), 400);
+            setTimeout(() => window.location.replace(RUTA_SISTEMA), 350);
         } else {
             if (estadoModal) {
                 estadoModal.className = "text-xs font-bold text-center text-red-600 bg-red-50 border border-red-200 rounded-xl p-2.5";
-                estadoModal.innerText = "Debes aceptar la instalación para usar el acceso directo.";
+                estadoModal.innerText = "Debes confirmar la instalación para usar el acceso directo.";
             }
         }
     } else if (esStandaloneActual() || esEntornoLocal()) {
@@ -85,12 +84,11 @@ document.getElementById('btnConfirmarInstalacionPWA')?.addEventListener('click',
     } else {
         if (estadoModal) {
             estadoModal.className = "text-xs font-bold text-center text-blue-700 bg-blue-50 border border-blue-200 rounded-xl p-2.5";
-            estadoModal.innerText = "Usa el menú ⋮ del navegador para instalar Match Control y luego pulsa 'Entrar a Match Control'.";
+            estadoModal.innerText = "Usa el menú ⋮ del navegador para instalar Match Control y pulsa 'Entrar a Match Control'.";
         }
     }
 });
 
-// Botón "Entrar a Match Control" dentro de la ventana flotante
 document.getElementById('btnEntrarMatch')?.addEventListener('click', () => {
     const estadoModal = document.getElementById('estadoModalInstalar');
     const licenciaOk = localStorage.getItem('licencia_validada') === 'true';
@@ -122,37 +120,37 @@ if (btnPegar) {
                 const statusDiv = document.getElementById('statusMsg');
                 if (statusDiv) {
                     statusDiv.className = "text-xs font-bold text-emerald-600";
-                    statusDiv.innerText = "¡Serial pegado! Ahora pulsa 'Validar Serial y Pedir Instalación'.";
+                    statusDiv.innerText = "¡Serial pegado con éxito!";
                 }
             } else {
-                alert("Tu navegador no permite lectura automática. Mantén presionado el cuadro de texto para pegar.");
+                alert("Tu navegador no permite lectura automática. Mantén presionado el cuadro de texto.");
             }
         } catch (err) {
-            alert("No se pudo acceder al portapapeles. Pega tu serial manualmente en el recuadro.");
+            alert("No se pudo acceder al portapapeles. Mantén presionado el recuadro para pegar tu serial.");
         }
     });
 }
 
-// 2. Validar serial y abrir ventana flotante de instalación
+// 2. Proceso de activación exclusivo por Serial de Licencia (misma data compartida)
 async function procesarActivacionEInstalacion() {
     const rawToken = document.getElementById('tokenInput').value.trim();
     const statusDiv = document.getElementById('statusMsg');
     const btn = document.getElementById('btnActivarEInstalar');
 
     if (!rawToken) {
-        return alert("Por favor, pega el serial de licencia primero.");
+        return alert("Por favor, pega el código de licencia primero.");
     }
 
     btn.disabled = true;
-    btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Verificando serial...`;
+    btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Verificando licencia...`;
 
     try {
         const data = JSON.parse(atob(rawToken));
         const hwID = getHardwareID();
-        const activationId = data.clubId || data.activation_id || data.orgId;
+        const activationId = data.clubId || data.activation_id;
 
         if (!activationId) {
-            throw new Error("El serial no contiene un ID de organización válido.");
+            throw new Error("El token no contiene un ID de club válido.");
         }
 
         const { data: empresaData, error: empresaError } = await supabaseMaster
@@ -162,16 +160,7 @@ async function procesarActivacionEInstalacion() {
             .single();
 
         if (empresaError || !empresaData) {
-            throw new Error("La licencia no existe en el sistema.");
-        }
-
-        if (empresaData.activa === false || empresaData.estado === 'suspendida') {
-            throw new Error("Esta licencia se encuentra suspendida o inactiva.");
-        }
-
-        const fechaVence = empresaData.fecha_vencimiento || empresaData.vence || data.expira;
-        if (fechaVence && new Date() > new Date(fechaVence)) {
-            throw new Error(`La licencia venció el ${fechaVence}.`);
+            throw new Error("El club o la licencia no existe en el sistema.");
         }
 
         let equiposLicencia = Array.isArray(empresaData.equipos) ? empresaData.equipos : [];
@@ -179,9 +168,9 @@ async function procesarActivacionEInstalacion() {
         let limiteLicencia = (limiteStr === "Ilimitado") ? 999 : (parseInt(limiteStr, 10) || 3);
 
         if (!equiposLicencia.includes(hwID) && equiposLicencia.length >= limiteLicencia) {
-            alert("Error: Se alcanzó el límite de dispositivos permitidos para este serial.");
+            alert("Error: Límite de dispositivos alcanzado para esta licencia.");
             btn.disabled = false;
-            btn.innerHTML = `<i class="fas fa-key text-sm"></i> Validar Serial y Pedir Instalación`;
+            btn.innerHTML = `<i class="fas fa-download text-sm"></i> Activar Licencia e Instalar`;
             return;
         }
 
@@ -193,28 +182,28 @@ async function procesarActivacionEInstalacion() {
                 .eq('id', activationId);
         }
 
-        localStorage.setItem('match_control_supa_url', empresaData.supabase_url || data.supabaseUrl || "");
-        localStorage.setItem('match_control_supa_key', empresaData.supabase_key || data.supabaseKey || "");
-        localStorage.setItem('match_control_supa_bucket', empresaData.bucket || data.bucket || activationId);
+        localStorage.setItem('control_voley_supa_url', empresaData.supabase_url || data.supabaseUrl);
+        localStorage.setItem('control_voley_supa_key', empresaData.supabase_key || data.supabaseKey);
+        localStorage.setItem('control_voley_supa_bucket', empresaData.bucket || data.bucket || activationId);
 
-        const nombreOrg = empresaData.nombre || data.clubNombre || data.orgNombre || "Organización de Voleibol";
-        localStorage.setItem('match_control_org_nombre', nombreOrg);
+        if (empresaData.nombre || data.clubNombre) {
+            localStorage.setItem('control_voley_club_nombre', empresaData.nombre || data.clubNombre);
+        }
+
         localStorage.setItem('youcontrol_empresa_id', activationId);
         localStorage.setItem('licencia_validada', 'true');
 
         if (statusDiv) {
             statusDiv.className = "text-xs font-bold text-emerald-600";
-            statusDiv.innerText = "¡Serial correcto! Revisa la ventana para instalar Match Control.";
+            statusDiv.innerText = "¡Serial correcto! Abre la ventana de instalación para continuar.";
         }
 
         btn.disabled = false;
-        btn.innerHTML = `<i class="fas fa-key text-sm"></i> Validar Serial y Pedir Instalación`;
+        btn.innerHTML = `<i class="fas fa-download text-sm"></i> Activar Licencia e Instalar`;
 
-        // Si ya está corriendo como acceso directo instalado o en localhost, entra directo a match.html
         if (esStandaloneActual() || esEntornoLocal()) {
-            setTimeout(() => window.location.replace(RUTA_SISTEMA), 350);
+            setTimeout(() => window.location.replace(RUTA_SISTEMA), 300);
         } else {
-            // Si está en el navegador web normal, abre la ventana flotante pidiendo instalar
             abrirVentanaInstalacion();
         }
 
@@ -224,9 +213,9 @@ async function procesarActivacionEInstalacion() {
             statusDiv.className = "text-xs font-bold text-red-600";
             statusDiv.innerText = e.message;
         }
-        alert("Serial inválido: " + e.message);
+        alert("Código de licencia inválido: " + e.message);
         btn.disabled = false;
-        btn.innerHTML = `<i class="fas fa-key text-sm"></i> Validar Serial y Pedir Instalación`;
+        btn.innerHTML = `<i class="fas fa-download text-sm"></i> Activar Licencia e Instalar`;
     }
 }
 
