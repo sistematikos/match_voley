@@ -1,0 +1,24 @@
+{
+  "name": "Match Control - Torneos y Ligas de Voleibol",
+  "short_name": "Match Control",
+  "description": "Sistema exclusivo para organización de torneos y ligas de voleibol",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#030B1E",
+  "theme_color": "#0055FF",
+  "icons": [
+    {
+      "src": "./img/logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "./img/logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
