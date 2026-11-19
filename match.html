@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Match Control | Calendario, Grupos y Eliminatorias</title>
+    <link rel="manifest" href="manifest.json">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+    <!-- ESCUDO DE SEGURIDAD GLOBAL -->
+    <script src="security.js"></script>
+
+    <!-- GUARDIA ESTRICTA DE LICENCIA Y ACCESO DIRECTO -->
+    <script>
+        (function() {
+            const esLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+            const esStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+            const empresaID = localStorage.getItem('youcontrol_empresa_id');
+            const licenciaValidada = localStorage.getItem('licencia_validada');
+
+            if ((!esStandalone && !esLocal) || !empresaID || licenciaValidada !== 'true') {
+                window.location.replace('index.html');
+            }
+        })();
+    </script>
+
+    <script>
+        tailwind.config = {
+          theme: {
+            extend: {
+              fontFamily: { sans: ['"Plus Jakarta Sans"', 'sans-serif'] },
+              colors: {
+                brand: {
+                  50: '#f0f6ff', 100: '#e0edff', 500: '#0066ff', 600: '#0052cc', 700: '#003db3',
+                  electric: '#0055FF', cyan: '#00D2FF', orange: '#FF5500', dark: '#030B1E'
+                }
+              },
+              boxShadow: {
+                'electric': '0 10px 30px -5px rgba(0, 85, 255, 0.3)',
+                'glass': '0 20px 40px rgba(0, 31, 63, 0.05)',
+              }
+            }
+          }
+        }
+    </script>
+    <style>
+        body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #F8FAFC; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
+
+    <!-- CABECERA MATCH CONTROL -->
+    <header class="bg-brand-dark text-white px-4 md:px-8 py-4 shadow-lg sticky top-0 z-30">
+        <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4">
+            <div class="flex items-center gap-3">
+                <div class="w-11 h-11 rounded-xl bg-gradient-to-tr from-brand-electric to-brand-cyan flex items-center justify-center shadow-electric">
+                    <i class="fas fa-volleyball text-xl"></i>
+                </div>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <h1 class="font-black text-base md:text-lg uppercase tracking-tight">Match Control</h1>
+                        <span class="text-[10px] font-black bg-brand-orange px-2 py-0.5 rounded-full uppercase">Torneos y Ligas</span>
+                    </div>
+                    <p id="orgHeaderInfo" class="text-xs text-slate-300 font-semibold">Organización Activa • Max. 3 Sets (Gana 2)</p>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-2">
+                <button onclick="resetearTorneoCompleto()" class="px-3 py-2 rounded-xl bg-white/10 hover:bg-red-500/80 text-xs font-bold transition cursor-pointer">
+                    <i class="fas fa-trash-can mr-1"></i> Nuevo Torneo
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 space-y-6">
+
+        <!-- BARRA DE NAVEGACIÓN DE ETAPAS -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <button id="tab-equipos" onclick="cambiarVista('equipos')" class="p-4 rounded-2xl bg-brand-electric text-white font-black text-xs uppercase tracking-wider flex items-center justify-between shadow-electric transition cursor-pointer">
+                <span><i class="fas fa-users-gear mr-2"></i> 1. Registro de Equipos</span>
+                <span id="badgeEquipos" class="bg-white/20 px-2.5 py-1 rounded-lg">0</span>
+            </button>
+            <button id="tab-grupos" onclick="cambiarVista('grupos')" class="p-4 rounded-2xl bg-white text-slate-700 border border-slate-200 hover:border-brand-electric font-black text-xs uppercase tracking-wider flex items-center justify-between transition cursor-pointer">
+                <span><i class="fas fa-layer-group mr-2"></i> 2. Fase de Grupos y Calendario</span>
+                <span id="badgePartidosGrupo" class="bg-slate-100 text-slate-600 px-2.5 py-1 rounded-lg">0</span>
+            </button>
+            <button id="tab-eliminatorias" onclick="cambiarVista('eliminatorias')" class="p-4 rounded-2xl bg-white text-slate-700 border border-slate-200 hover:border-brand-electric font-black text-xs uppercase tracking-wider flex items-center justify-between transition cursor-pointer">
+                <span><i class="fas fa-trophy mr-2"></i> 3. Rondas Eliminatorias</span>
+                <span id="badgeRondaActual" class="bg-amber-100 text-amber-800 px-2.5 py-1 rounded-lg">Pendiente</span>
+            </button>
+        </div>
+
+        <!-- ========================================================= -->
+        <!-- SECCIÓN 1: REGISTRO DE EQUIPOS                           -->
+        <!-- ========================================================= -->
+        <section id="vista-equipos" class="space-y-6">
+            <div class="bg-white rounded-3xl border border-slate-200 p-6 shadow-glass">
+                <div class="flex flex-wrap items-center justify-between gap-2 mb-5">
+                    <div>
+                        <h2 class="text-base font-black uppercase tracking-tight text-slate-900">
+                            <i class="fas fa-plus-circle text-brand-electric mr-1.5"></i> Agregar Equipo al Torneo
+                        </h2>
+                        <p class="text-xs text-slate-500 font-semibold">Registra club, categoría, división y rama (Femenino / Masculino).</p>
+                    </div>
+                    <span class="text-[11px] font-bold bg-blue-50 text-brand-electric px-3 py-1.5 rounded-xl">
+                        Formato oficial: Mejor de 3 Sets (Gana el primero en 2 sets)
+                    </span>
+                </div>
+
+                <form id="formEquipo" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                    <div>
+                        <label class="block text-[11px] font-extrabold uppercase text-slate-600 mb-1">Nombre del Club</label>
+                        <input type="text" id="clubNombre" placeholder="Ej: Club Halcones" required class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-brand-electric">
+                    </div>
+
+                    <div>
+                        <label class="block text-[11px] font-extrabold uppercase text-slate-600 mb-1">Categoría</label>
+                        <input type="text" id="categoriaEquipo" list="listaCategorias" placeholder="Ej: Libre / Sub-19" required class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-brand-electric">
+                        <datalist id="listaCategorias">
+                            <option value="Libre">
+                            <option value="Sub-15">
+                            <option value="Sub-17">
+                            <option value="Sub-19">
+                            <option value="Sub-21">
+                            <option value="Máster">
+                        </datalist>
+                    </div>
+
+                    <div>
+                        <label class="block text-[11px] font-extrabold uppercase text-slate-600 mb-1">División</label>
+                        <input type="text" id="divisionEquipo" list="listaDivisiones" placeholder="Ej: Primera / Ascenso" required class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-brand-electric">
+                        <datalist id="listaDivisiones">
+                            <option value="Primera División">
+                            <option value="Segunda División">
+                            <option value="División Élite">
+                            <option value="Ascenso">
+                        </datalist>
+                    </div>
+
+                    <div>
+                        <label class="block text-[11px] font-extrabold uppercase text-slate-600 mb-1">Rama</label>
+                        <select id="ramaEquipo" required class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-brand-electric">
+                            <option value="Femenino">Femenino</option>
+                            <option value="Masculino">Masculino</option>
+                        </select>
+                    </div>
+
+                    <div class="flex items-end">
+                        <button type="submit" class="w-full py-3 px-4 bg-brand-electric hover:bg-brand-600 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-electric transition cursor-pointer">
+                            <i class="fas fa-user-plus mr-1"></i> Guardar Equipo
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- LISTADO DE EQUIPOS REGISTRADOS -->
+            <div class="bg-white rounded-3xl border border-slate-200 p-6 shadow-glass space-y-4">
+                <div class="flex flex-wrap items-center justify-between gap-4">
+                    <h3 class="text-sm font-black uppercase tracking-wider text-slate-800">
+                        Equipos Inscritos (<span id="totalEquiposTexto">0</span>)
+                    </h3>
+
+                    <div class="flex flex-wrap items-center gap-2">
+                        <select id="filtroRama" onchange="renderEquipos()" class="p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold">
+                            <option value="TODAS">Todas las ramas</option>
+                            <option value="Femenino">Femenino</option>
+                            <option value="Masculino">Masculino</option>
+                        </select>
+
+                        <div class="flex items-center gap-2 bg-blue-50 border border-brand-electric/20 px-3 py-1.5 rounded-xl">
+                            <label class="text-[11px] font-extrabold text-brand-electric uppercase">Grupos:</label>
+                            <input type="number" id="cantidadGrupos" value="2" min="1" max="16" class="w-14 p-1 bg-white border border-slate-200 rounded-lg text-xs font-black text-center">
+                        </div>
+
+                        <button onclick="generarFaseGrupos()" class="py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow transition cursor-pointer">
+                            <i class="fas fa-calendar-plus mr-1"></i> Generar Grupos y Calendario
+                        </button>
+                    </div>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="border-b border-slate-200 text-[11px] font-black uppercase text-slate-500">
+                                <th class="py-3 px-3">#</th>
+                                <th class="py-3 px-3">Club / Equipo</th>
+                                <th class="py-3 px-3">Categoría</th>
+                                <th class="py-3 px-3">División</th>
+                                <th class="py-3 px-3">Rama</th>
+                                <th class="py-3 px-3 text-right">Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tablaEquiposBody" class="divide-y divide-slate-100 text-xs font-semibold"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- ========================================================= -->
+        <!-- SECCIÓN 2: FASE DE GRUPOS, CALENDARIO Y ESTADÍSTICA       -->
+        <!-- ========================================================= -->
+        <section id="vista-grupos" class="hidden space-y-6">
+            <div class="bg-gradient-to-r from-brand-dark to-slate-900 text-white rounded-3xl p-6 shadow-xl flex flex-wrap items-center justify-between gap-4">
+                <div>
+                    <span class="text-[10px] font-black uppercase tracking-widest text-brand-cyan">Siguiente Fase por Estadística / %</span>
+                    <h2 class="text-base md:text-lg font-black uppercase mt-0.5">¿Deseas pasar a Rondas Eliminatorias?</h2>
+                    <p class="text-xs text-slate-300 mt-1">
+                        Los equipos se ordenan por <strong>% de victorias</strong> y desempates; se enfrentan el <strong>mejor (#1) contra el peor (#N)</strong>, el <strong>#2 contra el #(N-1)</strong> y así sucesivamente.
+                    </p>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    <button onclick="solicitarPaseEliminatoria(16)" class="py-3 px-4 bg-brand-orange hover:bg-orange-600 text-white font-black text-xs uppercase rounded-xl shadow transition cursor-pointer">
+                        <i class="fas fa-sitemap mr-1"></i> Pasar a 16vos de Final
+                    </button>
+                    <button onclick="solicitarPaseEliminatoria(8)" class="py-3 px-4 bg-brand-electric hover:bg-brand-600 text-white font-black text-xs uppercase rounded-xl shadow-electric transition cursor-pointer">
+                        <i class="fas fa-trophy mr-1"></i> Pasar a 8vos de Final
+                    </button>
+                </div>
+            </div>
+
+            <div id="contenedorGrupos" class="space-y-6"></div>
+
+            <div class="bg-white rounded-3xl border border-slate-200 p-6 shadow-glass space-y-4">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                        <h3 class="text-sm font-black uppercase tracking-wider text-slate-900">
+                            <i class="fas fa-chart-line text-brand-electric mr-1.5"></i> Tabla General por Porcentaje (%) y Estadística
+                        </h3>
+                        <p class="text-xs text-slate-500 font-semibold">Base de siembra para el cruce Mejor vs. Peor en eliminatorias.</p>
+                    </div>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="border-b border-slate-200 text-[11px] font-black uppercase text-slate-500">
+                                <th class="py-3 px-2">Seed</th>
+                                <th class="py-3 px-3">Club</th>
+                                <th class="py-3 px-2">Grupo</th>
+                                <th class="py-3 px-2">Rama / Cat / Div</th>
+                                <th class="py-3 px-2 text-center">PJ</th>
+                                <th class="py-3 px-2 text-center">PG</th>
+                                <th class="py-3 px-2 text-center">PP</th>
+                                <th class="py-3 px-2 text-center">% Vic</th>
+                                <th class="py-3 px-2 text-center">Sets (SF/SC)</th>
+                                <th class="py-3 px-2 text-center">Pts (PF/PC)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tablaEstadisticaBody" class="divide-y divide-slate-100 text-xs font-bold"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- ========================================================= -->
+        <!-- SECCIÓN 3: RONDAS ELIMINATORIAS                          -->
+        <!-- ========================================================= -->
+        <section id="vista-eliminatorias" class="hidden space-y-6">
+            <div class="bg-white rounded-3xl border border-slate-200 p-6 shadow-glass flex flex-wrap items-center justify-between gap-4">
+                <div>
+                    <span id="etiquetaRondaElim" class="text-[11px] font-black uppercase tracking-wider text-brand-orange">Cuadro Eliminatorio</span>
+                    <h2 id="tituloRondaElim" class="text-lg font-black uppercase text-slate-900 mt-0.5">Sin ronda eliminatoria iniciada</h2>
+                    <p class="text-xs text-slate-500 font-semibold">
+                        Cada partido se juega al mejor de 3 sets (gana el primero en 2 sets). Al completar todos los cruces de la ronda, avanza automáticamente a la siguiente etapa.
+                    </p>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    <button onclick="solicitarPaseEliminatoria(16)" class="py-2.5 px-3.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-black text-xs uppercase rounded-xl cursor-pointer">
+                        Iniciar desde 16vos
+                    </button>
+                    <button onclick="solicitarPaseEliminatoria(8)" class="py-2.5 px-3.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-black text-xs uppercase rounded-xl cursor-pointer">
+                        Iniciar desde 8vos
+                    </button>
+                    <button id="btnAvanzarSiguienteRonda" onclick="avanzarSiguienteRondaElim()" class="hidden py-2.5 px-4 bg-brand-electric hover:bg-brand-600 text-white font-black text-xs uppercase rounded-xl shadow-electric cursor-pointer">
+                        <i class="fas fa-forward-step mr-1"></i> Avanzar a Siguiente Ronda
+                    </button>
+                </div>
+            </div>
+
+            <div id="campeonBanner" class="hidden bg-gradient-to-r from-amber-500 via-orange-500 to-brand-electric text-white rounded-3xl p-8 text-center shadow-xl space-y-2">
+                <div class="text-4xl">🏆🏐</div>
+                <p class="text-xs font-black uppercase tracking-widest">Campeón del Torneo</p>
+                <h3 id="nombreCampeon" class="text-2xl md:text-3xl font-black uppercase"></h3>
+            </div>
+
+            <div id="contenedorEliminatorias" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+        </section>
+
+    </main>
+
+    <!-- MODAL DE CONFIRMACIÓN PARA PASAR A ELIMINATORIAS -->
+    <div id="modalEliminatoria" class="fixed inset-0 bg-brand-dark/70 backdrop-blur-sm hidden items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 border border-slate-200">
+            <div class="w-12 h-12 rounded-2xl bg-blue-50 text-brand-electric flex items-center justify-center text-xl">
+                <i class="fas fa-ranking-star"></i>
+            </div>
+            <h3 id="modalElimTitulo" class="text-base font-black uppercase text-slate-900">Confirmar Pase a Eliminatorias</h3>
+            <p id="modalElimTexto" class="text-xs text-slate-600 leading-relaxed font-semibold"></p>
+            <div class="flex justify-end gap-2 pt-2">
+                <button onclick="cerrarModalElim()" class="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-black uppercase text-slate-700 cursor-pointer">
+                    Cancelar
+                </button>
+                <button id="btnConfirmarElim" class="px-4 py-2.5 rounded-xl bg-brand-electric hover:bg-brand-600 text-xs font-black uppercase text-white shadow-electric cursor-pointer">
+                    Sí, Generar Cruces
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- LÓGICA DE MATCH CONTROL -->
+    <script src="match.js"></script>
+</body>
+</html>
