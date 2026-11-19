@@ -32,8 +32,8 @@ function guardarEstado() {
 
 document.addEventListener('DOMContentLoaded', () => {
     const orgNombre =
-        localStorage.getItem('match_control_org_nombre') ||
         localStorage.getItem('control_voley_club_nombre') ||
+        localStorage.getItem('youcontrol_empresa_id') ||
         'Organización de Voleibol';
 
     document.getElementById('orgHeaderInfo').textContent =
@@ -96,9 +96,6 @@ function actualizarBadges() {
     document.getElementById('badgeRondaActual').textContent = estado.eliminatoria.rondaActual || 'Pendiente';
 }
 
-// =========================================================
-// 1. REGISTRO DE EQUIPOS
-// =========================================================
 function eliminarEquipo(id) {
     estado.equipos = estado.equipos.filter((eq) => eq.id !== id);
     guardarEstado();
@@ -144,9 +141,6 @@ function renderEquipos() {
         .join('');
 }
 
-// =========================================================
-// 2. GENERACIÓN DE GRUPOS Y CALENDARIO (RONDA CLASIFICATORIA)
-// =========================================================
 function generarFaseGrupos() {
     const filtroRama = document.getElementById('filtroRama').value;
     const poolEquipos =
@@ -437,9 +431,6 @@ function renderGruposYEstadistica() {
         .join('');
 }
 
-// =========================================================
-// 3. RONDAS ELIMINATORIAS (MEJOR VS PEOR POR ESTADÍSTICA / %)
-// =========================================================
 function solicitarPaseEliminatoria(tamanoLlave) {
     rondaPendienteConfirmar = tamanoLlave;
     const nombreRonda = tamanoLlave === 16 ? '16vos de Final' : '8vos de Final';
