@@ -1,5 +1,6 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
 
+const CATEGORIAS_OFICIALES = ['U9', 'U11', 'U13', 'U15', 'U19', 'U21', 'Libre'];
 const TABLA_TORNEOS = 'torneos_match_control';
 
 let estado = estadoInicial();
@@ -9,9 +10,22 @@ let empresaIdActual = '';
 let nombreOrgActual = 'Organización de Voleibol';
 let temporizadorSync = null;
 
+function normalizarCategoria(rawCat) {
+    const limpia = (rawCat || '').trim();
+    if (!limpia) return 'Libre';
+
+    const sinGuion = limpia.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const oficialMatch = CATEGORIAS_OFICIALES.find(
+        (c) => c.toUpperCase().replace(/[^A-Z0-9]/g, '') === sinGuion
+    );
+
+    return oficialMatch || limpia;
+}
+
 function crearEstructuraCategoria(nombreCat) {
+    const cat = normalizarCategoria(nombreCat);
     return {
-        nombre: nombreCat,
+        nombre: cat,
         diasJuego: '',
         condiciones: '',
         cantidadGrupos: 2,
@@ -25,23 +39,28 @@ function crearEstructuraCategoria(nombreCat) {
 }
 
 function estadoInicial() {
+    const categoriasData = {};
+    CATEGORIAS_OFICIALES.forEach((cat) => {
+        categoriasData[cat] = crearEstructuraCategoria(cat);
+    });
+
     return {
         nombreTorneo: 'Torneo Oficial de Voleibol',
-        categoriaActiva: 'Libre',
+        categoriaActiva: 'U9',
         equipos: [],
-        categoriasData: {
-            'Libre': crearEstructuraCategoria('Libre')
-        }
+        categoriasData
     };
 }
 
 function asegurarCategoria(nombreCat) {
-    const limpia = (nombreCat || 'General').trim() || 'General';
-    if (!estado.categoriasData) estado.categoriasData = {};
-    if (!estado.categoriasData[limpia]) {
-        estado.categoriasData[limpia] = crearEstructuraCategoria(limpia);
+    const cat = normalizarCategoria(nombreCat);
+    if (!estado.categoriasData || typeof estado.categoriasData !== 'object') {
+        estado.categoriasData = {};
     }
-    return limpia;
+    if (!estado.categoriasData[cat]) {
+        estado.categoriasData[cat] = crearEstructuraCategoria(cat);
+    }
+    return cat;
 }
 
 function obtenerDatosCategoriaActiva() {
@@ -77,6 +96,46 @@ function inicializarSupabaseClub() {
     return false;
 }
 
+function hidratarEstadoDesdeObjeto(nube) {
+    const base = estadoInicial();
+    const categoriasData = { ...base.categoriasData };
+
+    if (nube && nube.categoriasData && typeof nube.categoriasData === 'object') {
+        Object.entries(nube.categoriasData).forEach(([clave, valor]) => {
+            const catNormalizada = normalizarCategoria(clave);
+            const existente = categoriasData[catNormalizada] || crearEstructuraCategoria(catNormalizada);
+            categoriasData[catNormalizada] = {
+                ...existente,
+                ...(valor || {}),
+                nombre: catNormalizada,
+                grupos: Array.isArray(valor?.grupos) ? valor.grupos : [],
+                eliminatoria: {
+                    ...existente.eliminatoria,
+                    ...(valor?.eliminatoria || {})
+                }
+            };
+        });
+    }
+
+    const equiposNormalizados = Array.isArray(nube?.equipos)
+        ? nube.equipos.map((eq) => ({
+              ...eq,
+              categoria: normalizarCategoria(eq.categoria)
+          }))
+        : [];
+
+    const categoriaActiva = asegurarCategoria(nube?.categoriaActiva || base.categoriaActiva);
+
+    return {
+        ...base,
+        ...(nube || {}),
+        nombreTorneo: (nube?.nombreTorneo || base.nombreTorneo).trim() || base.nombreTorneo,
+        categoriaActiva,
+        equipos: equiposNormalizados,
+        categoriasData
+    };
+}
+
 async function cargarDesdeSupabase() {
     if (!supabaseClub || !empresaIdActual) {
         actualizarEstadoSync('Configura Supabase al activar licencia', 'text-red-300');
@@ -95,16 +154,7 @@ async function cargarDesdeSupabase() {
         if (error) throw error;
 
         if (data && data.estado_torneo && typeof data.estado_torneo === 'object') {
-            const nube = data.estado_torneo;
-            estado = {
-                ...estadoInicial(),
-                ...nube,
-                equipos: Array.isArray(nube.equipos) ? nube.equipos : [],
-                categoriasData: nube.categoriasData && typeof nube.categoriasData === 'object'
-                    ? nube.categoriasData
-                    : estadoInicial().categoriasData
-            };
-            asegurarCategoria(estado.categoriaActiva);
+            estado = hidratarEstadoDesdeObjeto(data.estado_torneo);
             renderTodo();
             actualizarEstadoSync('Conectado a Supabase', 'text-emerald-300');
         } else {
@@ -198,12 +248,23 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 function obtenerListaCategoriasDisponibles() {
-    const setCats = new Set(Object.keys(estado.categoriasData || {}));
-    estado.equipos.forEach((eq) => {
-        if (eq.categoria) setCats.add(eq.categoria.trim());
+    const extras = new Set();
+
+    Object.keys(estado.categoriasData || {}).forEach((cat) => {
+        const normalizada = normalizarCategoria(cat);
+        if (!CATEGORIAS_OFICIALES.includes(normalizada)) {
+            extras.add(normalizada);
+        }
     });
-    if (setCats.size === 0) setCats.add('Libre');
-    return Array.from(setCats);
+
+    estado.equipos.forEach((eq) => {
+        const normalizada = normalizarCategoria(eq.categoria);
+        if (!CATEGORIAS_OFICIALES.includes(normalizada)) {
+            extras.add(normalizada);
+        }
+    });
+
+    return [...CATEGORIAS_OFICIALES, ...Array.from(extras)];
 }
 
 function renderSelectorCategorias() {
@@ -268,7 +329,7 @@ function obtenerEquiposDeCategoriaFiltrados() {
     const filtroRama = document.getElementById('filtroRama')?.value || 'TODAS';
 
     return estado.equipos.filter((eq) => {
-        const mismaCat = (eq.categoria || 'Libre').trim() === catActiva;
+        const mismaCat = normalizarCategoria(eq.categoria) === catActiva;
         const mismaRama = filtroRama === 'TODAS' || eq.rama === filtroRama;
         return mismaCat && mismaRama;
     });
@@ -330,7 +391,7 @@ function renderEquipos() {
         <tr class="hover:bg-slate-50">
             <td class="py-3 px-3 text-slate-400">${idx + 1}</td>
             <td class="py-3 px-3 font-black text-slate-900">${eq.club}</td>
-            <td class="py-3 px-3"><span class="px-2.5 py-1 rounded-lg bg-blue-50 text-brand-electric font-bold">${eq.categoria}</span></td>
+            <td class="py-3 px-3"><span class="px-2.5 py-1 rounded-lg bg-blue-50 text-brand-electric font-bold">${normalizarCategoria(eq.categoria)}</span></td>
             <td class="py-3 px-3 text-slate-700">${eq.division}</td>
             <td class="py-3 px-3">
                 <span class="px-2.5 py-1 rounded-lg text-[11px] font-black ${eq.rama === 'Femenino' ? 'bg-pink-50 text-pink-600' : 'bg-indigo-50 text-indigo-600'}">
