@@ -2,6 +2,15 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
 
 const CATEGORIAS_OFICIALES = ['U9', 'U11', 'U13', 'U15', 'U19', 'U21', 'Libre'];
 const TABLA_TORNEOS = 'torneos_match_control';
+const ETIQUETAS_DIA = {
+    1: 'Lun',
+    2: 'Mar',
+    3: 'Mié',
+    4: 'Jue',
+    5: 'Vie',
+    6: 'Sáb',
+    0: 'Dom'
+};
 
 let estado = estadoInicial();
 let supabaseClub = null;
@@ -37,6 +46,33 @@ function crearEstructuraCategoria(nombreCat) {
     };
 }
 
+function normalizarCanchas(rawCanchas, fallback) {
+    if (!Array.isArray(rawCanchas) || rawCanchas.length === 0) {
+        return fallback;
+    }
+
+    return rawCanchas
+        .map((item) => {
+            if (typeof item === 'string') {
+                const nombre = item.trim();
+                return nombre ? { nombre, diasSemana: [6, 0] } : null;
+            }
+            if (item && typeof item === 'object') {
+                const nombre = (item.nombre || '').trim();
+                if (!nombre) return null;
+                const dias = Array.isArray(item.diasSemana)
+                    ? item.diasSemana.map((d) => Number(d)).filter((d) => !Number.isNaN(d))
+                    : [6, 0];
+                return {
+                    nombre,
+                    diasSemana: dias.length > 0 ? Array.from(new Set(dias)) : [6, 0]
+                };
+            }
+            return null;
+        })
+        .filter(Boolean);
+}
+
 function estadoInicial() {
     const categoriasData = {};
     CATEGORIAS_OFICIALES.forEach((cat) => {
@@ -46,7 +82,10 @@ function estadoInicial() {
     return {
         nombreTorneo: 'Torneo Oficial de Voleibol',
         categoriaActiva: 'U9',
-        canchas: ['Cancha 1', 'Cancha 2'],
+        canchas: [
+            { nombre: 'Cancha 1', diasSemana: [6, 0] },
+            { nombre: 'Cancha 2', diasSemana: [6, 0] }
+        ],
         equipos: [],
         categoriasData
     };
@@ -124,10 +163,7 @@ function hidratarEstadoDesdeObjeto(nube) {
           }))
         : [];
 
-    const canchasNormalizadas = Array.isArray(nube?.canchas) && nube.canchas.length > 0
-        ? nube.canchas.map((c) => (c || '').trim()).filter(Boolean)
-        : base.canchas;
-
+    const canchasNormalizadas = normalizarCanchas(nube?.canchas, base.canchas);
     const categoriaActiva = asegurarCategoria(nube?.categoriaActiva || base.categoriaActiva);
 
     return {
@@ -236,77 +272,59 @@ function obtenerListaCategoriasDisponibles() {
     return [...CATEGORIAS_OFICIALES, ...Array.from(extras)];
 }
 
-function renderSelectorCategorias() {
-    const select = document.getElementById('categoriaSelect');
-    if (!select) return;
-
-    const cats = obtenerListaCategoriasDisponibles();
-    const activa = asegurarCategoria(estado.categoriaActiva);
-
-    select.innerHTML = cats
-        .map((cat) => `<option value="${cat}" ${cat === activa ? 'selected' : ''}>${cat}</option>`)
-        .join('');
+function obtenerCanchaObj(nombreCancha) {
+    return (estado.canchas || []).find((c) => c.nombre === nombreCancha) || null;
 }
 
-function poblarControlesAsignacionBloque() {
-    const canchas = Array.isArray(estado.canchas) ? estado.canchas : [];
-    const categorias = obtenerListaCategoriasDisponibles();
-    const activa = asegurarCategoria(estado.categoriaActiva);
-
-    const selCancha = document.getElementById('asignarCanchaSelect');
-    if (selCancha) {
-        const prevCancha = selCancha.value;
-        selCancha.innerHTML = canchas.length === 0
-            ? `<option value="">Agrega una cancha primero</option>`
-            : canchas.map((c) => `<option value="${c}" ${c === prevCancha ? 'selected' : ''}>${c}</option>`).join('');
-    }
-
-    const selCat = document.getElementById('asignarCategoriaSelect');
-    if (selCat) {
-        const current = selCat.value && categorias.includes(selCat.value) ? selCat.value : activa;
-        selCat.innerHTML = categorias
-            .map((cat) => `<option value="${cat}" ${cat === current ? 'selected' : ''}>${cat}</option>`)
-            .join('');
-    }
-
-    poblarGruposAsignacion();
+function formatearDiasSemana(dias) {
+    if (!Array.isArray(dias) || dias.length === 0) return 'Sin días definidos';
+    const orden = [1, 2, 3, 4, 5, 6, 0];
+    return orden
+        .filter((d) => dias.includes(d))
+        .map((d) => ETIQUETAS_DIA[d])
+        .join(', ');
 }
 
-function poblarGruposAsignacion() {
-    const selCat = document.getElementById('asignarCategoriaSelect');
-    const selGrupo = document.getElementById('asignarGrupoSelect');
-    if (!selCat || !selGrupo) return;
+function calcularFechasDisponiblesEnSemana(fechaBaseStr, diasSemana) {
+    const base = fechaBaseStr ? new Date(`${fechaBaseStr}T12:00:00`) : new Date();
+    if (Number.isNaN(base.getTime())) return [];
 
-    const cat = asegurarCategoria(selCat.value || estado.categoriaActiva);
-    const catData = estado.categoriasData[cat] || crearEstructuraCategoria(cat);
-    const grupos = Array.isArray(catData.grupos) ? catData.grupos : [];
-    const tieneElim = Array.isArray(catData.eliminatoria?.partidos) && catData.eliminatoria.partidos.length > 0;
+    const diasActivos = Array.isArray(diasSemana) && diasSemana.length > 0
+        ? diasSemana
+        : [1, 2, 3, 4, 5, 6, 0];
 
-    const opciones = [{ value: 'TODOS_GRUPOS', label: 'Todos los grupos' }];
-    grupos.forEach((g) => {
-        opciones.push({ value: `GRUPO::${g.nombre}`, label: g.nombre });
-    });
-    if (tieneElim) {
-        opciones.push({ value: 'ELIMINATORIA', label: `Eliminatoria (${catData.eliminatoria.rondaActual || 'Llave'})` });
+    const fechas = [];
+    for (let offset = 0; offset < 7; offset++) {
+        const candidata = new Date(base);
+        candidata.setDate(base.getDate() + offset);
+        if (diasActivos.includes(candidata.getDay())) {
+            const yyyy = candidata.getFullYear();
+            const mm = String(candidata.getMonth() + 1).padStart(2, '0');
+            const dd = String(candidata.getDate()).padStart(2, '0');
+            fechas.push(`${yyyy}-${mm}-${dd}`);
+        }
     }
-
-    const prev = selGrupo.value;
-    selGrupo.innerHTML = opciones
-        .map((op) => `<option value="${op.value}" ${op.value === prev ? 'selected' : ''}>${op.label}</option>`)
-        .join('');
+    return fechas.length > 0 ? fechas : [fechaBaseStr].filter(Boolean);
 }
 
-async function cambiarCategoria(nuevaCat) {
-    estado.categoriaActiva = asegurarCategoria(nuevaCat);
-    const selAsigCat = document.getElementById('asignarCategoriaSelect');
-    if (selAsigCat) selAsigCat.value = estado.categoriaActiva;
+async function alternarDiaCancha(nombreCancha, diaNum) {
+    const canchaObj = obtenerCanchaObj(nombreCancha);
+    if (!canchaObj) return;
+
+    const actuales = new Set(canchaObj.diasSemana || []);
+    if (actuales.has(diaNum)) {
+        if (actuales.size > 1) actuales.delete(diaNum);
+    } else {
+        actuales.add(diaNum);
+    }
+    canchaObj.diasSemana = Array.from(actuales);
+
     renderTodoCalendario();
     await guardarEnSupabase();
 }
 
 async function eliminarCancha(nombreCancha) {
-    if (!Array.isArray(estado.canchas)) return;
-    estado.canchas = estado.canchas.filter((c) => c !== nombreCancha);
+    estado.canchas = (estado.canchas || []).filter((c) => c.nombre !== nombreCancha);
     renderTodoCalendario();
     await guardarEnSupabase();
 }
@@ -343,6 +361,77 @@ function obtenerPartidosCategoria(catNombre) {
     return lista;
 }
 
+function actualizarOpcionesSemana() {
+    const categorias = obtenerListaCategoriasDisponibles();
+    const selCat = document.getElementById('semCategoriaSelect');
+    const selDiv = document.getElementById('semDivisionSelect');
+    const selCancha = document.getElementById('semCanchaSelect');
+    const contGrupos = document.getElementById('semGruposChecklist');
+    if (!selCat || !selDiv || !selCancha || !contGrupos) return;
+
+    const catElegida = asegurarCategoria(selCat.value || estado.categoriaActiva);
+    if (!Array.from(selCat.options).some((o) => o.value === catElegida)) {
+        selCat.innerHTML = categorias
+            .map((c) => `<option value="${c}" ${c === catElegida ? 'selected' : ''}>${c}</option>`)
+            .join('');
+    }
+    selCat.value = catElegida;
+
+    const equiposCat = estado.equipos.filter((eq) => normalizarCategoria(eq.categoria) === catElegida);
+    const divisiones = Array.from(
+        new Set(equiposCat.map((eq) => (eq.division || '').trim()).filter(Boolean))
+    );
+    const divPrevia = selDiv.value;
+    selDiv.innerHTML =
+        `<option value="TODAS">Todas las divisiones</option>` +
+        divisiones.map((d) => `<option value="${d}" ${d === divPrevia ? 'selected' : ''}>${d}</option>`).join('');
+
+    const canchas = estado.canchas || [];
+    const canchaPrevia = selCancha.value;
+    selCancha.innerHTML = canchas.length === 0
+        ? `<option value="">Agrega una cancha primero</option>`
+        : canchas.map((c) => `<option value="${c.nombre}" ${c.nombre === canchaPrevia ? 'selected' : ''}>${c.nombre} (${formatearDiasSemana(c.diasSemana)})</option>`).join('');
+
+    const catData = estado.categoriasData[catElegida] || crearEstructuraCategoria(catElegida);
+    const grupos = Array.isArray(catData.grupos) ? catData.grupos : [];
+    const tieneElim = Array.isArray(catData.eliminatoria?.partidos) && catData.eliminatoria.partidos.length > 0;
+
+    const prevMarcados = Array.from(contGrupos.querySelectorAll('input[type="checkbox"]:checked')).map((el) => el.value);
+
+    const opcionesBloque = grupos.map((g) => ({ value: `GRUPO::${g.nombre}`, label: g.nombre }));
+    if (tieneElim) {
+        opcionesBloque.push({ value: 'ELIMINATORIA', label: `Eliminatoria (${catData.eliminatoria.rondaActual || 'Llave'})` });
+    }
+
+    if (opcionesBloque.length === 0) {
+        contGrupos.innerHTML = `<span class="text-xs text-slate-400 font-semibold">No hay grupos generados en ${catElegida} todavía.</span>`;
+        return;
+    }
+
+    const usarPrevios = prevMarcados.length > 0;
+    contGrupos.innerHTML = opcionesBloque
+        .map((op) => {
+            const marcado = usarPrevios ? prevMarcados.includes(op.value) : true;
+            return `
+                <label class="cursor-pointer select-none">
+                    <input type="checkbox" value="${op.value}" ${marcado ? 'checked' : ''} class="sr-only peer sem-grupo-check">
+                    <span class="px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-xs font-black text-slate-600 peer-checked:bg-brand-electric peer-checked:text-white peer-checked:border-brand-electric transition inline-block">
+                        ${op.label}
+                    </span>
+                </label>
+            `;
+        })
+        .join('');
+}
+
+async function cambiarCategoria(nuevaCat) {
+    estado.categoriaActiva = asegurarCategoria(nuevaCat);
+    const selSemCat = document.getElementById('semCategoriaSelect');
+    if (selSemCat) selSemCat.value = estado.categoriaActiva;
+    renderTodoCalendario();
+    await guardarEnSupabase();
+}
+
 function actualizarProgramacionPartido(origen, grupoIdx, partidoIdx, campo, valor) {
     const catData = obtenerDatosCategoriaActiva();
     const partido = origen === 'grupo'
@@ -366,40 +455,49 @@ function renderResumenPorCancha() {
     const cont = document.getElementById('resumenPorCancha');
     if (!cont) return;
 
-    const canchas = Array.isArray(estado.canchas) ? estado.canchas : [];
-    const todasLasCategorias = obtenerListaCategoriasDisponibles();
+    const canchas = estado.canchas || [];
+    const categorias = obtenerListaCategoriasDisponibles();
 
-    const mapaCanchas = {};
+    const mapa = {};
     canchas.forEach((c) => {
-        mapaCanchas[c] = { bloques: new Set(), totalPartidos: 0 };
+        mapa[c.nombre] = {
+            diasTexto: formatearDiasSemana(c.diasSemana),
+            asignaciones: new Set(),
+            totalPartidos: 0
+        };
     });
 
-    todasLasCategorias.forEach((cat) => {
-        const items = obtenerPartidosCategoria(cat);
-        items.forEach(({ bloqueEtiqueta, partido }) => {
+    categorias.forEach((cat) => {
+        obtenerPartidosCategoria(cat).forEach(({ bloqueEtiqueta, partido }) => {
             if (!partido.cancha) return;
-            if (!mapaCanchas[partido.cancha]) {
-                mapaCanchas[partido.cancha] = { bloques: new Set(), totalPartidos: 0 };
+            if (!mapa[partido.cancha]) {
+                mapa[partido.cancha] = {
+                    diasTexto: 'Días por definir',
+                    asignaciones: new Set(),
+                    totalPartidos: 0
+                };
             }
-            const fechaTexto = partido.dia ? `${partido.dia} • ` : '';
-            mapaCanchas[partido.cancha].bloques.add(`${fechaTexto}${cat} • ${bloqueEtiqueta}`);
-            mapaCanchas[partido.cancha].totalPartidos += 1;
+            const divInfo = partido.divisionSemanal && partido.divisionSemanal !== 'TODAS'
+                ? ` (${partido.divisionSemanal})`
+                : '';
+            const fechaInfo = partido.dia ? `${partido.dia} • ` : '';
+            mapa[partido.cancha].asignaciones.add(`${fechaInfo}${cat}${divInfo} • ${bloqueEtiqueta}`);
+            mapa[partido.cancha].totalPartidos += 1;
         });
     });
 
-    const nombresCanchas = Object.keys(mapaCanchas);
-    if (nombresCanchas.length === 0) {
-        cont.innerHTML = `<div class="col-span-full bg-white rounded-2xl border border-slate-200 p-5 text-xs text-slate-500 font-semibold">Agrega una cancha arriba para comenzar a asignar fechas, categorías y grupos.</div>`;
+    const nombres = Object.keys(mapa);
+    if (nombres.length === 0) {
+        cont.innerHTML = `<div class="col-span-full bg-white rounded-2xl border border-slate-200 p-5 text-xs text-slate-500 font-semibold">Agrega una cancha arriba para comenzar.</div>`;
         return;
     }
 
-    cont.innerHTML = nombresCanchas.map((cancha) => {
-        const info = mapaCanchas[cancha];
-        const etiquetas = Array.from(info.bloques);
-
+    cont.innerHTML = nombres.map((cancha) => {
+        const info = mapa[cancha];
+        const items = Array.from(info.asignaciones);
         return `
             <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-glass space-y-2.5">
-                <div class="flex items-center justify-between">
+                <div class="flex items-center justify-between gap-2">
                     <span class="font-black text-xs uppercase text-brand-electric">
                         <i class="fas fa-location-dot mr-1"></i> ${cancha}
                     </span>
@@ -407,12 +505,14 @@ function renderResumenPorCancha() {
                         ${info.totalPartidos} partido(s)
                     </span>
                 </div>
-
+                <p class="text-[11px] font-bold text-slate-500">
+                    <i class="fas fa-calendar-week text-brand-orange mr-1"></i> Días: ${info.diasTexto}
+                </p>
                 ${
-                    etiquetas.length === 0
-                        ? `<p class="text-[11px] text-slate-400 font-semibold">Sin fechas, categorías o grupos asignados aún.</p>`
+                    items.length === 0
+                        ? `<p class="text-[11px] text-slate-400 font-semibold">Sin categorías o grupos asignados aún.</p>`
                         : `<div class="flex flex-wrap gap-1.5">
-                            ${etiquetas.map((etq) => `<span class="px-2 py-1 rounded-lg bg-blue-50 text-slate-800 text-[11px] font-bold">${etq}</span>`).join('')}
+                            ${items.map((txt) => `<span class="px-2 py-1 rounded-lg bg-blue-50 text-slate-800 text-[11px] font-bold">${txt}</span>`).join('')}
                            </div>`
                 }
             </div>
@@ -423,7 +523,8 @@ function renderResumenPorCancha() {
 function renderTodoCalendario() {
     const catActiva = asegurarCategoria(estado.categoriaActiva);
     const catData = obtenerDatosCategoriaActiva();
-    const canchas = Array.isArray(estado.canchas) ? estado.canchas : [];
+    const canchas = estado.canchas || [];
+    const nombresCanchas = canchas.map((c) => c.nombre);
 
     const torneoEl = document.getElementById('nombreTorneoSubtitulo');
     if (torneoEl) torneoEl.textContent = estado.nombreTorneo || 'Torneo Oficial de Voleibol';
@@ -435,22 +536,52 @@ function renderTodoCalendario() {
         reglasEl.textContent = `${dias} • ${cond}`;
     }
 
-    renderSelectorCategorias();
-    poblarControlesAsignacionBloque();
+    const contCanchas = document.getElementById('listaCanchasConfiguradas');
+    if (contCanchas) {
+        contCanchas.innerHTML = canchas.length === 0
+            ? `<div class="col-span-full text-xs text-slate-400 font-semibold">No hay canchas configuradas.</div>`
+            : canchas.map((c) => {
+                const diasSet = new Set(c.diasSemana || []);
+                const botonesDia = [1, 2, 3, 4, 5, 6, 0].map((d) => {
+                    const activo = diasSet.has(d);
+                    return `
+                        <button type="button" onclick="alternarDiaCancha('${c.nombre.replace(/'/g, "\\'")}', ${d})"
+                            class="px-2 py-1 rounded-lg text-[10px] font-black transition cursor-pointer ${
+                                activo
+                                    ? 'bg-brand-electric text-white'
+                                    : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                            }">
+                            ${ETIQUETAS_DIA[d]}
+                        </button>
+                    `;
+                }).join('');
 
-    const chipsCont = document.getElementById('listaCanchasChips');
-    if (chipsCont) {
-        chipsCont.innerHTML = canchas.length === 0
-            ? `<span class="text-xs text-slate-400 font-semibold">No hay canchas agregadas todavía.</span>`
-            : canchas.map((c) => `
-                <span class="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-blue-50 text-brand-electric text-xs font-black border border-brand-electric/20">
-                    <i class="fas fa-volleyball text-[11px]"></i> ${c}
-                    <button type="button" onclick="eliminarCancha('${c.replace(/'/g, "\\'")}')" title="Quitar cancha" class="text-slate-400 hover:text-red-600 cursor-pointer">
-                        <i class="fas fa-times text-[11px]"></i>
-                    </button>
-                </span>
-            `).join('');
+                return `
+                    <div class="p-4 rounded-2xl border border-slate-200 bg-slate-50/70 space-y-2.5">
+                        <div class="flex items-center justify-between">
+                            <span class="font-black text-xs uppercase text-slate-900">
+                                <i class="fas fa-volleyball text-brand-electric mr-1"></i> ${c.nombre}
+                            </span>
+                            <button type="button" onclick="eliminarCancha('${c.nombre.replace(/'/g, "\\'")}')" title="Quitar cancha" class="text-slate-400 hover:text-red-600 text-xs cursor-pointer">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                        <div class="flex flex-wrap gap-1">${botonesDia}</div>
+                    </div>
+                `;
+            }).join('');
     }
+
+    const selCatFiltro = document.getElementById('categoriaSelect');
+    if (selCatFiltro) {
+        const cats = obtenerListaCategoriasDisponibles();
+        selCatFiltro.innerHTML = cats
+            .map((cat) => `<option value="${cat}" ${cat === catActiva ? 'selected' : ''}>${cat}</option>`)
+            .join('');
+    }
+
+    actualizarOpcionesSemana();
+    renderResumenPorCancha();
 
     const todosCategoria = obtenerPartidosCategoria(catActiva);
 
@@ -462,28 +593,27 @@ function renderTodoCalendario() {
             gruposUnicos.map((g) => `<option value="${g}" ${g === prev ? 'selected' : ''}>${g}</option>`).join('');
     }
 
-    const selCancha = document.getElementById('filtroCancha');
-    if (selCancha) {
-        const prev = selCancha.value || 'TODAS';
-        selCancha.innerHTML =
+    const selCanchaFiltro = document.getElementById('filtroCancha');
+    if (selCanchaFiltro) {
+        const prev = selCanchaFiltro.value || 'TODAS';
+        selCanchaFiltro.innerHTML =
             `<option value="TODAS">Todas las canchas</option>` +
             `<option value="SIN_ASIGNAR" ${prev === 'SIN_ASIGNAR' ? 'selected' : ''}>Sin cancha asignada</option>` +
-            canchas.map((c) => `<option value="${c}" ${c === prev ? 'selected' : ''}>${c}</option>`).join('');
+            nombresCanchas.map((c) => `<option value="${c}" ${c === prev ? 'selected' : ''}>${c}</option>`).join('');
     }
 
-    const selFecha = document.getElementById('filtroFecha');
-    if (selFecha) {
-        const prev = selFecha.value || 'TODAS';
+    const selFechaFiltro = document.getElementById('filtroFecha');
+    if (selFechaFiltro) {
+        const prev = selFechaFiltro.value || 'TODAS';
         const fechasUnicas = Array.from(
             new Set(todosCategoria.map((i) => i.partido.dia).filter(Boolean))
         ).sort();
-        selFecha.innerHTML =
+        selFechaFiltro.innerHTML =
             `<option value="TODAS">Todas las fechas</option>` +
             `<option value="SIN_FECHA" ${prev === 'SIN_FECHA' ? 'selected' : ''}>Sin fecha asignada</option>` +
             fechasUnicas.map((f) => `<option value="${f}" ${f === prev ? 'selected' : ''}>${f}</option>`).join('');
     }
 
-    // Detectar choques globales por cancha + día + hora entre todas las categorías
     const claveConteo = {};
     obtenerListaCategoriasDisponibles().forEach((cat) => {
         obtenerPartidosCategoria(cat).forEach(({ partido }) => {
@@ -505,8 +635,6 @@ function renderTodoCalendario() {
             alertaEl.innerHTML = '';
         }
     }
-
-    renderResumenPorCancha();
 
     const filtroGrupo = document.getElementById('filtroGrupo')?.value || 'TODOS';
     const filtroCancha = document.getElementById('filtroCancha')?.value || 'TODAS';
@@ -553,9 +681,9 @@ function renderTodoCalendario() {
 
     if (filtrados.length === 0) {
         cont.innerHTML = `
-            <div class="bg-white rounded-3xl border border-slate-200 p-8 text-center space-y-2">
+            <div class="bg-white rounded-2xl border border-slate-200 p-8 text-center space-y-2">
                 <p class="text-sm font-black text-slate-700">No hay partidos para mostrar en ${catActiva}</p>
-                <p class="text-xs text-slate-500">Genera los grupos de <strong>${catActiva}</strong> en <strong>Match Control</strong> o ajusta los filtros de grupo, cancha o fecha.</p>
+                <p class="text-xs text-slate-500">Genera los grupos de <strong>${catActiva}</strong> en <strong>Match Control</strong> o ajusta los filtros.</p>
             </div>
         `;
         return;
@@ -570,15 +698,17 @@ function renderTodoCalendario() {
             partido.hora &&
             claveConteo[`${partido.cancha}__${partido.dia}__${partido.hora}`] > 1;
 
-        const opcionesCancha = canchas.includes(partido.cancha) || !partido.cancha
-            ? canchas
-            : [...canchas, partido.cancha];
+        const opcionesCancha = nombresCanchas.includes(partido.cancha) || !partido.cancha
+            ? nombresCanchas
+            : [...nombresCanchas, partido.cancha];
+
+        const divEtq = eqA.division && eqA.division !== '-' ? ` • ${eqA.division}` : '';
 
         return `
             <div class="bg-white rounded-2xl border ${tieneChoque ? 'border-amber-400 bg-amber-50/30' : 'border-slate-200'} p-4 shadow-glass space-y-3">
                 <div class="flex flex-wrap items-center justify-between gap-2 text-[11px] font-black uppercase">
                     <div class="flex items-center gap-2">
-                        <span class="px-2.5 py-1 rounded-lg bg-blue-50 text-brand-electric">${bloqueEtiqueta}</span>
+                        <span class="px-2.5 py-1 rounded-lg bg-blue-50 text-brand-electric">${bloqueEtiqueta}${divEtq}</span>
                         <span class="text-slate-400">Jornada ${partido.jornada || partidoIdx + 1}</span>
                     </div>
                     <span class="${tieneChoque ? 'text-amber-700' : 'text-slate-500'}">
@@ -603,7 +733,7 @@ function renderTodoCalendario() {
                         </div>
 
                         <div>
-                            <label class="block text-[10px] font-extrabold uppercase text-slate-400 mb-0.5">Día</label>
+                            <label class="block text-[10px] font-extrabold uppercase text-slate-400 mb-0.5">Fecha</label>
                             <input type="date" value="${partido.dia || ''}" onchange="actualizarProgramacionPartido('${origen}', ${grupoIdx}, ${partidoIdx}, 'dia', this.value)" class="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-brand-electric">
                         </div>
 
@@ -626,58 +756,18 @@ function renderTodoCalendario() {
 document.addEventListener('DOMContentLoaded', async () => {
     inicializarSupabaseClub();
 
+    const fechaInicioInput = document.getElementById('semFechaInicio');
+    if (fechaInicioInput && !fechaInicioInput.value) {
+        const hoy = new Date();
+        const yyyy = hoy.getFullYear();
+        const mm = String(hoy.getMonth() + 1).padStart(2, '0');
+        const dd = String(hoy.getDate()).padStart(2, '0');
+        fechaInicioInput.value = `${yyyy}-${mm}-${dd}`;
+    }
+
     const orgHeader = document.getElementById('orgHeaderInfo');
     if (orgHeader) {
         orgHeader.innerHTML = `${nombreOrgActual} • <span id="syncStatusTexto" class="text-[11px] font-bold text-slate-300">Iniciando...</span>`;
-    }
-
-    const formAsignar = document.getElementById('formAsignarBloque');
-    if (formAsignar) {
-        formAsignar.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const fecha = document.getElementById('asignarFechaInput')?.value || '';
-            const cancha = document.getElementById('asignarCanchaSelect')?.value || '';
-            const cat = asegurarCategoria(document.getElementById('asignarCategoriaSelect')?.value || estado.categoriaActiva);
-            const grupoSel = document.getElementById('asignarGrupoSelect')?.value || 'TODOS_GRUPOS';
-            const msgEl = document.getElementById('mensajeAsignacionBloque');
-
-            if (!fecha || !cancha) return;
-
-            const itemsCat = obtenerPartidosCategoria(cat);
-            const objetivos = itemsCat.filter((item) => {
-                if (grupoSel === 'TODOS_GRUPOS') return item.origen === 'grupo';
-                if (grupoSel === 'ELIMINATORIA') return item.origen === 'eliminatoria';
-                if (grupoSel.startsWith('GRUPO::')) {
-                    return item.origen === 'grupo' && item.bloqueEtiqueta === grupoSel.replace('GRUPO::', '');
-                }
-                return true;
-            });
-
-            if (objetivos.length === 0) {
-                if (msgEl) {
-                    msgEl.className = 'text-xs font-bold text-amber-700';
-                    msgEl.textContent = `No hay partidos creados en ${cat} para esa selección. Genera los grupos primero en Match Control.`;
-                }
-                return;
-            }
-
-            objetivos.forEach(({ partido }) => {
-                partido.dia = fecha;
-                partido.cancha = cancha;
-            });
-
-            estado.categoriaActiva = cat;
-            renderTodoCalendario();
-            if (msgEl) {
-                const descGrupo = grupoSel.startsWith('GRUPO::')
-                    ? grupoSel.replace('GRUPO::', '')
-                    : (grupoSel === 'ELIMINATORIA' ? 'Eliminatoria' : 'Todos los grupos');
-                msgEl.className = 'text-xs font-bold text-emerald-700';
-                msgEl.textContent = `Asignados ${objetivos.length} partido(s) de ${cat} (${descGrupo}) en ${cancha} para el ${fecha}.`;
-            }
-
-            await guardarEnSupabase();
-        });
     }
 
     const formAgregarCancha = document.getElementById('formAgregarCancha');
@@ -688,12 +778,98 @@ document.addEventListener('DOMContentLoaded', async () => {
             const nombre = (input?.value || '').trim();
             if (!nombre) return;
 
+            const diasSeleccionados = Array.from(
+                document.querySelectorAll('.dia-cancha-check:checked')
+            ).map((cb) => Number(cb.value));
+
+            const diasFinales = diasSeleccionados.length > 0 ? diasSeleccionados : [6, 0];
             if (!Array.isArray(estado.canchas)) estado.canchas = [];
-            const existe = estado.canchas.some((c) => c.toLowerCase() === nombre.toLowerCase());
-            if (!existe) estado.canchas.push(nombre);
+
+            const existente = estado.canchas.find((c) => c.nombre.toLowerCase() === nombre.toLowerCase());
+            if (existente) {
+                existente.diasSemana = diasFinales;
+            } else {
+                estado.canchas.push({ nombre, diasSemana: diasFinales });
+            }
 
             input.value = '';
             renderTodoCalendario();
+            await guardarEnSupabase();
+        });
+    }
+
+    const formSemanal = document.getElementById('formProgramacionSemanal');
+    if (formSemanal) {
+        formSemanal.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const cat = asegurarCategoria(document.getElementById('semCategoriaSelect')?.value || estado.categoriaActiva);
+            const division = document.getElementById('semDivisionSelect')?.value || 'TODAS';
+            const canchaNombre = document.getElementById('semCanchaSelect')?.value || '';
+            const fechaBase = document.getElementById('semFechaInicio')?.value || '';
+            const gruposMarcados = Array.from(
+                document.querySelectorAll('.sem-grupo-check:checked')
+            ).map((cb) => cb.value);
+
+            const msgEl = document.getElementById('mensajeProgramacionSemanal');
+            if (!canchaNombre) return;
+
+            if (gruposMarcados.length === 0) {
+                if (msgEl) {
+                    msgEl.className = 'text-xs font-bold text-amber-700';
+                    msgEl.textContent = 'Selecciona al menos un grupo o fase para asignar esta semana.';
+                }
+                return;
+            }
+
+            const todosItems = obtenerPartidosCategoria(cat);
+            const seleccionados = todosItems.filter(({ bloqueEtiqueta, partido }) => {
+                const coincideGrupo = gruposMarcados.some((val) => {
+                    if (val === 'ELIMINATORIA') return bloqueEtiqueta.startsWith('Eliminatoria');
+                    if (val.startsWith('GRUPO::')) return bloqueEtiqueta === val.replace('GRUPO::', '');
+                    return false;
+                });
+                if (!coincideGrupo) return false;
+
+                if (division === 'TODAS') return true;
+                const eqA = obtenerEquipoPorId(partido.eqA);
+                const eqB = obtenerEquipoPorId(partido.eqB);
+                return eqA.division === division || eqB.division === division;
+            });
+
+            if (seleccionados.length === 0) {
+                if (msgEl) {
+                    msgEl.className = 'text-xs font-bold text-amber-700';
+                    msgEl.textContent = `No hay partidos que coincidan con ${cat} / ${division} y los grupos elegidos.`;
+                }
+                return;
+            }
+
+            const canchaObj = obtenerCanchaObj(canchaNombre);
+            const fechasDisponibles = calcularFechasDisponiblesEnSemana(fechaBase, canchaObj?.diasSemana);
+
+            seleccionados.forEach(({ partido }, idx) => {
+                partido.cancha = canchaNombre;
+                partido.divisionSemanal = division;
+                if (fechasDisponibles.length > 0) {
+                    partido.dia = fechasDisponibles[idx % fechasDisponibles.length];
+                }
+                if (!partido.orden) {
+                    partido.orden = idx + 1;
+                }
+            });
+
+            estado.categoriaActiva = cat;
+            renderTodoCalendario();
+
+            if (msgEl) {
+                const gruposTexto = gruposMarcados
+                    .map((g) => (g.startsWith('GRUPO::') ? g.replace('GRUPO::', '') : 'Eliminatoria'))
+                    .join(', ');
+                const divTexto = division === 'TODAS' ? 'todas las divisiones' : division;
+                msgEl.className = 'text-xs font-bold text-emerald-700';
+                msgEl.textContent = `Asignados ${seleccionados.length} juego(s) de ${cat} (${divTexto} • ${gruposTexto}) en ${canchaNombre} entre ${fechasDisponibles[0] || fechaBase} y ${fechasDisponibles[fechasDisponibles.length - 1] || fechaBase}.`;
+            }
+
             await guardarEnSupabase();
         });
     }
@@ -703,7 +879,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 window.cambiarCategoria = cambiarCategoria;
-window.poblarGruposAsignacion = poblarGruposAsignacion;
+window.alternarDiaCancha = alternarDiaCancha;
 window.eliminarCancha = eliminarCancha;
+window.actualizarOpcionesSemana = actualizarOpcionesSemana;
 window.actualizarProgramacionPartido = actualizarProgramacionPartido;
 window.renderTodoCalendario = renderTodoCalendario;
