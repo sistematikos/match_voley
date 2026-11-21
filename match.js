@@ -259,9 +259,23 @@ function abrirModalEditarEquipo(id) {
     const eq = estado.equipos.find((item) => item.id === id);
     if (!eq) return;
 
+    const catActual = normalizarCategoria(eq.categoria);
+    const selectCat = document.getElementById('editCategoriaEquipo');
+    const categoriasDisponibles = obtenerListaCategoriasDisponibles();
+
+    if (selectCat) {
+        const opciones = categoriasDisponibles.includes(catActual)
+            ? categoriasDisponibles
+            : [...categoriasDisponibles, catActual];
+
+        selectCat.innerHTML = opciones
+            .map((cat) => `<option value="${cat}" ${cat === catActual ? 'selected' : ''}>${cat}</option>`)
+            .join('');
+        selectCat.value = catActual;
+    }
+
     document.getElementById('editEquipoId').value = eq.id;
     document.getElementById('editClubNombre').value = eq.club || '';
-    document.getElementById('editCategoriaEquipo').value = normalizarCategoria(eq.categoria);
     document.getElementById('editDivisionEquipo').value = eq.division || '';
     document.getElementById('editRamaEquipo').value = eq.rama || 'Femenino';
 
