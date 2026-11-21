@@ -235,6 +235,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     }
 
+    const formEditarEquipo = document.getElementById('formEditarEquipo');
+    if (formEditarEquipo) {
+        formEditarEquipo.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            await guardarEdicionEquipo();
+        });
+    }
+
     const btnConfirmarElim = document.getElementById('btnConfirmarElim');
     if (btnConfirmarElim) {
         btnConfirmarElim.addEventListener('click', async () => {
@@ -246,6 +254,57 @@ document.addEventListener('DOMContentLoaded', async () => {
     renderTodo();
     await cargarDesdeSupabase();
 });
+
+function abrirModalEditarEquipo(id) {
+    const eq = estado.equipos.find((item) => item.id === id);
+    if (!eq) return;
+
+    document.getElementById('editEquipoId').value = eq.id;
+    document.getElementById('editClubNombre').value = eq.club || '';
+    document.getElementById('editCategoriaEquipo').value = normalizarCategoria(eq.categoria);
+    document.getElementById('editDivisionEquipo').value = eq.division || '';
+    document.getElementById('editRamaEquipo').value = eq.rama || 'Femenino';
+
+    const modal = document.getElementById('modalEditarEquipo');
+    if (modal) {
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+    }
+}
+
+function cerrarModalEditarEquipo() {
+    const modal = document.getElementById('modalEditarEquipo');
+    if (modal) {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+    }
+}
+
+async function guardarEdicionEquipo() {
+    const id = document.getElementById('editEquipoId').value;
+    const idx = estado.equipos.findIndex((item) => item.id === id);
+    if (idx === -1) return;
+
+    const nuevoClub = document.getElementById('editClubNombre').value.trim();
+    const nuevaCat = asegurarCategoria(document.getElementById('editCategoriaEquipo').value);
+    const nuevaDiv = document.getElementById('editDivisionEquipo').value.trim();
+    const nuevaRama = document.getElementById('editRamaEquipo').value;
+
+    if (!nuevoClub || !nuevaDiv) return;
+
+    estado.equipos[idx] = {
+        ...estado.equipos[idx],
+        club: nuevoClub,
+        categoria: nuevaCat,
+        division: nuevaDiv,
+        rama: nuevaRama
+    };
+
+    estado.categoriaActiva = nuevaCat;
+    cerrarModalEditarEquipo();
+    renderTodo();
+    await guardarEnSupabase();
+}
 
 function obtenerListaCategoriasDisponibles() {
     const extras = new Set();
@@ -399,9 +458,14 @@ function renderEquipos() {
                 </span>
             </td>
             <td class="py-3 px-3 text-right">
-                <button onclick="eliminarEquipo('${eq.id}')" class="text-red-500 hover:text-red-700 font-bold text-xs cursor-pointer">
-                    <i class="fas fa-trash"></i>
-                </button>
+                <div class="inline-flex items-center gap-3">
+                    <button type="button" onclick="abrirModalEditarEquipo('${eq.id}')" title="Editar equipo" class="text-brand-electric hover:text-brand-700 font-bold text-xs cursor-pointer">
+                        <i class="fas fa-pen-to-square"></i>
+                    </button>
+                    <button type="button" onclick="eliminarEquipo('${eq.id}')" title="Eliminar equipo" class="text-red-500 hover:text-red-700 font-bold text-xs cursor-pointer">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
             </td>
         </tr>
     `
@@ -978,6 +1042,8 @@ window.cambiarCategoriaActiva = cambiarCategoriaActiva;
 window.actualizarDatosTorneo = actualizarDatosTorneo;
 window.actualizarReglaCategoria = actualizarReglaCategoria;
 window.actualizarCantidadGruposInput = actualizarCantidadGruposInput;
+window.abrirModalEditarEquipo = abrirModalEditarEquipo;
+window.cerrarModalEditarEquipo = cerrarModalEditarEquipo;
 window.eliminarEquipo = eliminarEquipo;
 window.generarFaseGruposCategoria = generarFaseGruposCategoria;
 window.actualizarSetGrupo = actualizarSetGrupo;
