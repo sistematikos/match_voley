@@ -248,8 +248,58 @@ function renderSelectorCategorias() {
         .join('');
 }
 
+function poblarControlesAsignacionBloque() {
+    const canchas = Array.isArray(estado.canchas) ? estado.canchas : [];
+    const categorias = obtenerListaCategoriasDisponibles();
+    const activa = asegurarCategoria(estado.categoriaActiva);
+
+    const selCancha = document.getElementById('asignarCanchaSelect');
+    if (selCancha) {
+        const prevCancha = selCancha.value;
+        selCancha.innerHTML = canchas.length === 0
+            ? `<option value="">Agrega una cancha primero</option>`
+            : canchas.map((c) => `<option value="${c}" ${c === prevCancha ? 'selected' : ''}>${c}</option>`).join('');
+    }
+
+    const selCat = document.getElementById('asignarCategoriaSelect');
+    if (selCat) {
+        const current = selCat.value && categorias.includes(selCat.value) ? selCat.value : activa;
+        selCat.innerHTML = categorias
+            .map((cat) => `<option value="${cat}" ${cat === current ? 'selected' : ''}>${cat}</option>`)
+            .join('');
+    }
+
+    poblarGruposAsignacion();
+}
+
+function poblarGruposAsignacion() {
+    const selCat = document.getElementById('asignarCategoriaSelect');
+    const selGrupo = document.getElementById('asignarGrupoSelect');
+    if (!selCat || !selGrupo) return;
+
+    const cat = asegurarCategoria(selCat.value || estado.categoriaActiva);
+    const catData = estado.categoriasData[cat] || crearEstructuraCategoria(cat);
+    const grupos = Array.isArray(catData.grupos) ? catData.grupos : [];
+    const tieneElim = Array.isArray(catData.eliminatoria?.partidos) && catData.eliminatoria.partidos.length > 0;
+
+    const opciones = [{ value: 'TODOS_GRUPOS', label: 'Todos los grupos' }];
+    grupos.forEach((g) => {
+        opciones.push({ value: `GRUPO::${g.nombre}`, label: g.nombre });
+    });
+    if (tieneElim) {
+        opciones.push({ value: 'ELIMINATORIA', label: `Eliminatoria (${catData.eliminatoria.rondaActual || 'Llave'})` });
+    }
+
+    const prev = selGrupo.value;
+    selGrupo.innerHTML = opciones
+        .map((op) => `<option value="${op.value}" ${op.value === prev ? 'selected' : ''}>${op.label}</option>`)
+        .join('');
+}
+
 async function cambiarCategoria(nuevaCat) {
     estado.categoriaActiva = asegurarCategoria(nuevaCat);
+    const selAsigCat = document.getElementById('asignarCategoriaSelect');
+    if (selAsigCat) selAsigCat.value = estado.categoriaActiva;
     renderTodoCalendario();
     await guardarEnSupabase();
 }
@@ -321,7 +371,7 @@ function renderResumenPorCancha() {
 
     const mapaCanchas = {};
     canchas.forEach((c) => {
-        mapaCanchas[c] = { asignaciones: new Set(), totalPartidos: 0 };
+        mapaCanchas[c] = { bloques: new Set(), totalPartidos: 0 };
     });
 
     todasLasCategorias.forEach((cat) => {
@@ -329,22 +379,23 @@ function renderResumenPorCancha() {
         items.forEach(({ bloqueEtiqueta, partido }) => {
             if (!partido.cancha) return;
             if (!mapaCanchas[partido.cancha]) {
-                mapaCanchas[partido.cancha] = { asignaciones: new Set(), totalPartidos: 0 };
+                mapaCanchas[partido.cancha] = { bloques: new Set(), totalPartidos: 0 };
             }
-            mapaCanchas[partido.cancha].asignaciones.add(`${cat} • ${bloqueEtiqueta}`);
+            const fechaTexto = partido.dia ? `${partido.dia} • ` : '';
+            mapaCanchas[partido.cancha].bloques.add(`${fechaTexto}${cat} • ${bloqueEtiqueta}`);
             mapaCanchas[partido.cancha].totalPartidos += 1;
         });
     });
 
     const nombresCanchas = Object.keys(mapaCanchas);
     if (nombresCanchas.length === 0) {
-        cont.innerHTML = `<div class="col-span-full bg-white rounded-2xl border border-slate-200 p-5 text-xs text-slate-500 font-semibold">Agrega una cancha arriba para comenzar a asignar categorías y grupos.</div>`;
+        cont.innerHTML = `<div class="col-span-full bg-white rounded-2xl border border-slate-200 p-5 text-xs text-slate-500 font-semibold">Agrega una cancha arriba para comenzar a asignar fechas, categorías y grupos.</div>`;
         return;
     }
 
     cont.innerHTML = nombresCanchas.map((cancha) => {
         const info = mapaCanchas[cancha];
-        const etiquetas = Array.from(info.asignaciones);
+        const etiquetas = Array.from(info.bloques);
 
         return `
             <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-glass space-y-2.5">
@@ -359,7 +410,7 @@ function renderResumenPorCancha() {
 
                 ${
                     etiquetas.length === 0
-                        ? `<p class="text-[11px] text-slate-400 font-semibold">Sin categorías o grupos asignados aún.</p>`
+                        ? `<p class="text-[11px] text-slate-400 font-semibold">Sin fechas, categorías o grupos asignados aún.</p>`
                         : `<div class="flex flex-wrap gap-1.5">
                             ${etiquetas.map((etq) => `<span class="px-2 py-1 rounded-lg bg-blue-50 text-slate-800 text-[11px] font-bold">${etq}</span>`).join('')}
                            </div>`
@@ -385,6 +436,7 @@ function renderTodoCalendario() {
     }
 
     renderSelectorCategorias();
+    poblarControlesAsignacionBloque();
 
     const chipsCont = document.getElementById('listaCanchasChips');
     if (chipsCont) {
@@ -419,6 +471,18 @@ function renderTodoCalendario() {
             canchas.map((c) => `<option value="${c}" ${c === prev ? 'selected' : ''}>${c}</option>`).join('');
     }
 
+    const selFecha = document.getElementById('filtroFecha');
+    if (selFecha) {
+        const prev = selFecha.value || 'TODAS';
+        const fechasUnicas = Array.from(
+            new Set(todosCategoria.map((i) => i.partido.dia).filter(Boolean))
+        ).sort();
+        selFecha.innerHTML =
+            `<option value="TODAS">Todas las fechas</option>` +
+            `<option value="SIN_FECHA" ${prev === 'SIN_FECHA' ? 'selected' : ''}>Sin fecha asignada</option>` +
+            fechasUnicas.map((f) => `<option value="${f}" ${f === prev ? 'selected' : ''}>${f}</option>`).join('');
+    }
+
     // Detectar choques globales por cancha + día + hora entre todas las categorías
     const claveConteo = {};
     obtenerListaCategoriasDisponibles().forEach((cat) => {
@@ -446,6 +510,7 @@ function renderTodoCalendario() {
 
     const filtroGrupo = document.getElementById('filtroGrupo')?.value || 'TODOS';
     const filtroCancha = document.getElementById('filtroCancha')?.value || 'TODAS';
+    const filtroFecha = document.getElementById('filtroFecha')?.value || 'TODAS';
     const criterioOrden = document.getElementById('ordenPartidos')?.value || 'orden';
 
     const filtrados = todosCategoria.filter((item) => {
@@ -455,7 +520,12 @@ function renderTodoCalendario() {
             filtroCancha === 'TODAS' ||
             (filtroCancha === 'SIN_ASIGNAR' && !canchaPartido) ||
             canchaPartido === filtroCancha;
-        return pasaGrupo && pasaCancha;
+        const fechaPartido = item.partido.dia || '';
+        const pasaFecha =
+            filtroFecha === 'TODAS' ||
+            (filtroFecha === 'SIN_FECHA' && !fechaPartido) ||
+            fechaPartido === filtroFecha;
+        return pasaGrupo && pasaCancha && pasaFecha;
     });
 
     filtrados.sort((a, b) => {
@@ -485,7 +555,7 @@ function renderTodoCalendario() {
         cont.innerHTML = `
             <div class="bg-white rounded-3xl border border-slate-200 p-8 text-center space-y-2">
                 <p class="text-sm font-black text-slate-700">No hay partidos para mostrar en ${catActiva}</p>
-                <p class="text-xs text-slate-500">Genera los grupos de <strong>${catActiva}</strong> en <strong>Match Control</strong> o cambia los filtros.</p>
+                <p class="text-xs text-slate-500">Genera los grupos de <strong>${catActiva}</strong> en <strong>Match Control</strong> o ajusta los filtros de grupo, cancha o fecha.</p>
             </div>
         `;
         return;
@@ -561,6 +631,55 @@ document.addEventListener('DOMContentLoaded', async () => {
         orgHeader.innerHTML = `${nombreOrgActual} • <span id="syncStatusTexto" class="text-[11px] font-bold text-slate-300">Iniciando...</span>`;
     }
 
+    const formAsignar = document.getElementById('formAsignarBloque');
+    if (formAsignar) {
+        formAsignar.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const fecha = document.getElementById('asignarFechaInput')?.value || '';
+            const cancha = document.getElementById('asignarCanchaSelect')?.value || '';
+            const cat = asegurarCategoria(document.getElementById('asignarCategoriaSelect')?.value || estado.categoriaActiva);
+            const grupoSel = document.getElementById('asignarGrupoSelect')?.value || 'TODOS_GRUPOS';
+            const msgEl = document.getElementById('mensajeAsignacionBloque');
+
+            if (!fecha || !cancha) return;
+
+            const itemsCat = obtenerPartidosCategoria(cat);
+            const objetivos = itemsCat.filter((item) => {
+                if (grupoSel === 'TODOS_GRUPOS') return item.origen === 'grupo';
+                if (grupoSel === 'ELIMINATORIA') return item.origen === 'eliminatoria';
+                if (grupoSel.startsWith('GRUPO::')) {
+                    return item.origen === 'grupo' && item.bloqueEtiqueta === grupoSel.replace('GRUPO::', '');
+                }
+                return true;
+            });
+
+            if (objetivos.length === 0) {
+                if (msgEl) {
+                    msgEl.className = 'text-xs font-bold text-amber-700';
+                    msgEl.textContent = `No hay partidos creados en ${cat} para esa selección. Genera los grupos primero en Match Control.`;
+                }
+                return;
+            }
+
+            objetivos.forEach(({ partido }) => {
+                partido.dia = fecha;
+                partido.cancha = cancha;
+            });
+
+            estado.categoriaActiva = cat;
+            renderTodoCalendario();
+            if (msgEl) {
+                const descGrupo = grupoSel.startsWith('GRUPO::')
+                    ? grupoSel.replace('GRUPO::', '')
+                    : (grupoSel === 'ELIMINATORIA' ? 'Eliminatoria' : 'Todos los grupos');
+                msgEl.className = 'text-xs font-bold text-emerald-700';
+                msgEl.textContent = `Asignados ${objetivos.length} partido(s) de ${cat} (${descGrupo}) en ${cancha} para el ${fecha}.`;
+            }
+
+            await guardarEnSupabase();
+        });
+    }
+
     const formAgregarCancha = document.getElementById('formAgregarCancha');
     if (formAgregarCancha) {
         formAgregarCancha.addEventListener('submit', async (e) => {
@@ -584,6 +703,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 window.cambiarCategoria = cambiarCategoria;
+window.poblarGruposAsignacion = poblarGruposAsignacion;
 window.eliminarCancha = eliminarCancha;
 window.actualizarProgramacionPartido = actualizarProgramacionPartido;
 window.renderTodoCalendario = renderTodoCalendario;
