@@ -64,18 +64,18 @@
 
     <main class="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 space-y-6">
 
-        <!-- SELECTOR DE CATEGORÍA Y REGLAS -->
+        <!-- ENCABEZADO Y FILTROS DE VISUALIZACIÓN -->
         <div class="bg-white rounded-3xl border border-slate-200 p-6 shadow-glass space-y-4">
             <div class="flex flex-wrap items-center justify-between gap-3">
                 <div>
                     <span id="nombreTorneoSubtitulo" class="text-[11px] font-black uppercase tracking-wider text-brand-electric">Torneo Oficial de Voleibol</span>
-                    <h2 class="text-lg font-black uppercase text-slate-900 mt-0.5">Programación por Categoría, Grupo y Cancha</h2>
+                    <h2 class="text-lg font-black uppercase text-slate-900 mt-0.5">Programación por Fecha, Cancha, Categoría y Grupo</h2>
                     <p id="resumenReglasCategoria" class="text-xs text-slate-500 font-semibold"></p>
                 </div>
                 <div id="alertaChoques" class="hidden px-3.5 py-2 rounded-xl bg-amber-50 border border-amber-300 text-amber-800 text-xs font-extrabold"></div>
             </div>
 
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-3 pt-2 border-t border-slate-100">
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 pt-2 border-t border-slate-100">
                 <div>
                     <label class="block text-[11px] font-extrabold uppercase text-slate-600 mb-1">Categoría</label>
                     <select id="categoriaSelect" onchange="cambiarCategoria(this.value)" class="w-full p-2.5 bg-blue-50 border border-brand-electric/30 rounded-xl text-xs font-black text-brand-electric outline-none focus:ring-2 focus:ring-brand-electric"></select>
@@ -92,6 +92,11 @@
                 </div>
 
                 <div>
+                    <label class="block text-[11px] font-extrabold uppercase text-slate-600 mb-1">Fecha</label>
+                    <select id="filtroFecha" onchange="renderTodoCalendario()" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-brand-electric"></select>
+                </div>
+
+                <div>
                     <label class="block text-[11px] font-extrabold uppercase text-slate-600 mb-1">Ordenar Por</label>
                     <select id="ordenPartidos" onchange="renderTodoCalendario()" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-brand-electric">
                         <option value="orden">Orden manual / Jornada</option>
@@ -100,6 +105,46 @@
                     </select>
                 </div>
             </div>
+        </div>
+
+        <!-- ASIGNAR FECHA, CANCHA, CATEGORÍA Y GRUPO -->
+        <div class="bg-white rounded-3xl border border-slate-200 p-6 shadow-glass space-y-4">
+            <div>
+                <h3 class="text-sm font-black uppercase tracking-wider text-slate-900">
+                    <i class="fas fa-calendar-plus text-brand-electric mr-1.5"></i> Asignar Fecha, Cancha, Categoría y Grupo
+                </h3>
+                <p class="text-xs text-slate-500 font-semibold">Elige el día y la cancha, y define qué categoría y grupo jugarán allí.</p>
+            </div>
+
+            <form id="formAsignarBloque" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-end">
+                <div>
+                    <label class="block text-[11px] font-extrabold uppercase text-slate-600 mb-1">Fecha</label>
+                    <input type="date" id="asignarFechaInput" required class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-brand-electric">
+                </div>
+
+                <div>
+                    <label class="block text-[11px] font-extrabold uppercase text-slate-600 mb-1">Cancha</label>
+                    <select id="asignarCanchaSelect" required class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-brand-electric"></select>
+                </div>
+
+                <div>
+                    <label class="block text-[11px] font-extrabold uppercase text-slate-600 mb-1">Categoría</label>
+                    <select id="asignarCategoriaSelect" onchange="poblarGruposAsignacion()" required class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-brand-electric"></select>
+                </div>
+
+                <div>
+                    <label class="block text-[11px] font-extrabold uppercase text-slate-600 mb-1">Grupo / Fase</label>
+                    <select id="asignarGrupoSelect" required class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-brand-electric"></select>
+                </div>
+
+                <div>
+                    <button type="submit" class="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs uppercase rounded-xl shadow transition cursor-pointer">
+                        <i class="fas fa-check-double mr-1"></i> Asignar a Cancha
+                    </button>
+                </div>
+            </form>
+
+            <div id="mensajeAsignacionBloque" class="text-xs font-bold text-slate-500"></div>
         </div>
 
         <!-- GESTIÓN DE CANCHAS -->
@@ -119,10 +164,10 @@
             <div id="listaCanchasChips" class="flex flex-wrap gap-2"></div>
         </div>
 
-        <!-- RESUMEN POR CANCHA (CATEGORÍAS Y GRUPOS ASIGNADOS) -->
+        <!-- RESUMEN POR CANCHA (FECHAS, CATEGORÍAS Y GRUPOS ASIGNADOS) -->
         <div class="space-y-3">
             <h3 class="text-sm font-black uppercase tracking-wider text-slate-800">
-                <i class="fas fa-table-cells-large text-brand-electric mr-1.5"></i> Resumen por Cancha (Categorías y Grupos)
+                <i class="fas fa-table-cells-large text-brand-electric mr-1.5"></i> Resumen por Cancha (Fechas, Categorías y Grupos)
             </h3>
             <div id="resumenPorCancha" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
         </div>
