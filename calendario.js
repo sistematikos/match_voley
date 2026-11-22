@@ -2,6 +2,7 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
 
 const CATEGORIAS_OFICIALES = ['U9', 'U11', 'U13', 'U15', 'U19', 'U21', 'Libre'];
 const TABLA_TORNEOS = 'torneos_match_control';
+const DURACION_PARTIDO_MIN = 60;
 const ETIQUETAS_DIA = {
     1: 'Lun',
     2: 'Mar',
@@ -294,6 +295,13 @@ function formatearDiasSemana(dias) {
         .join(', ');
 }
 
+function formatearFechaISO(dateObj) {
+    const yyyy = dateObj.getFullYear();
+    const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
+    const dd = String(dateObj.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+}
+
 function calcularFechasDisponiblesEnSemana(fechaBaseStr, diasSemana) {
     const base = fechaBaseStr ? new Date(`${fechaBaseStr}T12:00:00`) : new Date();
     if (Number.isNaN(base.getTime())) return [];
@@ -307,13 +315,23 @@ function calcularFechasDisponiblesEnSemana(fechaBaseStr, diasSemana) {
         const candidata = new Date(base);
         candidata.setDate(base.getDate() + offset);
         if (diasActivos.includes(candidata.getDay())) {
-            const yyyy = candidata.getFullYear();
-            const mm = String(candidata.getMonth() + 1).padStart(2, '0');
-            const dd = String(candidata.getDate()).padStart(2, '0');
-            fechas.push(`${yyyy}-${mm}-${dd}`);
+            fechas.push(formatearFechaISO(candidata));
         }
     }
     return fechas.length > 0 ? fechas : [fechaBaseStr].filter(Boolean);
+}
+
+function sumarMinutosAHora(horaStr, minutosExtra) {
+    const limpia = (horaStr || '08:00').trim();
+    const partes = limpia.split(':');
+    const h = parseInt(partes[0], 10);
+    const m = parseInt(partes[1], 10);
+    if (Number.isNaN(h) || Number.isNaN(m)) return limpia;
+
+    const totalMin = (h * 60 + m + minutosExtra) % (24 * 60);
+    const hh = String(Math.floor(totalMin / 60)).padStart(2, '0');
+    const mm = String(totalMin % 60).padStart(2, '0');
+    return `${hh}:${mm}`;
 }
 
 async function alternarDiaCancha(nombreCancha, diaNum) {
@@ -486,11 +504,13 @@ function renderResumenPorCancha() {
                     totalPartidos: 0
                 };
             }
+            const diaNum = partido.diaTodosContraTodos || partido.jornada || 1;
             const divInfo = partido.divisionSemanal && partido.divisionSemanal !== 'TODAS'
                 ? ` (${partido.divisionSemanal})`
                 : '';
             const fechaInfo = partido.dia ? `${partido.dia} • ` : '';
-            mapa[partido.cancha].asignaciones.add(`${fechaInfo}${cat}${divInfo} • ${bloqueEtiqueta}`);
+            const horaInfo = partido.hora ? ` ${partido.hora}` : '';
+            mapa[partido.cancha].asignaciones.add(`Día ${diaNum} • ${fechaInfo}${cat}${divInfo} • ${bloqueEtiqueta}${horaInfo}`);
             mapa[partido.cancha].totalPartidos += 1;
         });
     });
@@ -649,7 +669,7 @@ function renderTodoCalendario() {
     const filtroGrupo = document.getElementById('filtroGrupo')?.value || 'TODOS';
     const filtroCancha = document.getElementById('filtroCancha')?.value || 'TODAS';
     const filtroFecha = document.getElementById('filtroFecha')?.value || 'TODAS';
-    const criterioOrden = document.getElementById('ordenPartidos')?.value || 'orden';
+    const criterioOrden = document.getElementById('ordenPartidos')?.value || 'dia1_cancha_fecha';
 
     const filtrados = todosCategoria.filter((item) => {
         const pasaGrupo = filtroGrupo === 'TODOS' || item.bloqueEtiqueta === filtroGrupo;
@@ -666,18 +686,39 @@ function renderTodoCalendario() {
         return pasaGrupo && pasaCancha && pasaFecha;
     });
 
+    const getDiaTvT = (p) => Number(p.diaTodosContraTodos || p.jornada || 999);
+
     filtrados.sort((a, b) => {
+        const pa = a.partido;
+        const pb = b.partido;
+
         if (criterioOrden === 'hora') {
-            const keyA = `${a.partido.dia || '9999-99-99'} ${a.partido.hora || '99:99'}`;
-            const keyB = `${b.partido.dia || '9999-99-99'} ${b.partido.hora || '99:99'}`;
+            const keyA = `${pa.dia || '9999-99-99'} ${pa.hora || '99:99'}`;
+            const keyB = `${pb.dia || '9999-99-99'} ${pb.hora || '99:99'}`;
             return keyA.localeCompare(keyB);
         }
         if (criterioOrden === 'cancha') {
-            return (a.partido.cancha || 'ZZZ').localeCompare(b.partido.cancha || 'ZZZ');
+            return (pa.cancha || 'ZZZ').localeCompare(pb.cancha || 'ZZZ') || getDiaTvT(pa) - getDiaTvT(pb);
         }
-        const ordA = a.partido.orden ?? a.partido.diaTodosContraTodos ?? a.partido.jornada ?? 999;
-        const ordB = b.partido.orden ?? b.partido.diaTodosContraTodos ?? b.partido.jornada ?? 999;
-        return ordA - ordB;
+        if (criterioOrden === 'orden') {
+            return (pa.orden ?? getDiaTvT(pa)) - (pb.orden ?? getDiaTvT(pb));
+        }
+
+        // Por defecto: Día 1 primero, luego cancha específica, fecha específica, hora y orden
+        const diaA = getDiaTvT(pa);
+        const diaB = getDiaTvT(pb);
+        if (diaA !== diaB) return diaA - diaB;
+
+        const canchaCmp = (pa.cancha || 'ZZZ').localeCompare(pb.cancha || 'ZZZ');
+        if (canchaCmp !== 0) return canchaCmp;
+
+        const fechaCmp = (pa.dia || '9999-99-99').localeCompare(pb.dia || '9999-99-99');
+        if (fechaCmp !== 0) return fechaCmp;
+
+        const horaCmp = (pa.hora || '99:99').localeCompare(pb.hora || '99:99');
+        if (horaCmp !== 0) return horaCmp;
+
+        return (pa.orden ?? 999) - (pb.orden ?? 999);
     });
 
     const tituloCat = document.getElementById('tituloCategoriaPartidos');
@@ -699,66 +740,105 @@ function renderTodoCalendario() {
         return;
     }
 
-    cont.innerHTML = filtrados.map(({ origen, grupoIdx, partidoIdx, bloqueEtiqueta, partido }) => {
-        const eqA = obtenerEquipoPorId(partido.eqA);
-        const eqB = obtenerEquipoPorId(partido.eqB);
-        const tieneChoque =
-            partido.cancha &&
-            partido.dia &&
-            partido.hora &&
-            claveConteo[`${partido.cancha}__${partido.dia}__${partido.hora}`] > 1;
+    // Agrupa visualmente por Día + Cancha + Fecha para ver claramente quiénes juegan el Día 1 en cada cancha y fecha
+    const bloques = [];
+    const indiceBloque = new Map();
 
-        const opcionesCancha = nombresCanchas.includes(partido.cancha) || !partido.cancha
-            ? nombresCanchas
-            : [...nombresCanchas, partido.cancha];
+    filtrados.forEach((item) => {
+        const p = item.partido;
+        const diaNum = getDiaTvT(p);
+        const canchaTxt = p.cancha || 'Sin cancha asignada';
+        const fechaTxt = p.dia || 'Sin fecha asignada';
+        const horaInicioTxt = p.hora ? ` • Inicio: ${p.hora}` : '';
+        const claveBloque = `${diaNum}__${canchaTxt}__${fechaTxt}`;
 
-        const divEtq = eqA.division && eqA.division !== '-' ? ` • ${eqA.division}` : '';
-        const diaTvT = partido.diaTodosContraTodos || partido.jornada || 1;
+        if (!indiceBloque.has(claveBloque)) {
+            const nuevoBloque = {
+                titulo: `Día ${diaNum} • ${canchaTxt} • ${fechaTxt}${horaInicioTxt}`,
+                items: []
+            };
+            indiceBloque.set(claveBloque, nuevoBloque);
+            bloques.push(nuevoBloque);
+        }
+        indiceBloque.get(claveBloque).items.push(item);
+    });
+
+    cont.innerHTML = bloques.map((bloque) => {
+        const tarjetasHtml = bloque.items.map(({ origen, grupoIdx, partidoIdx, bloqueEtiqueta, partido }) => {
+            const eqA = obtenerEquipoPorId(partido.eqA);
+            const eqB = obtenerEquipoPorId(partido.eqB);
+            const tieneChoque =
+                partido.cancha &&
+                partido.dia &&
+                partido.hora &&
+                claveConteo[`${partido.cancha}__${partido.dia}__${partido.hora}`] > 1;
+
+            const opcionesCancha = nombresCanchas.includes(partido.cancha) || !partido.cancha
+                ? nombresCanchas
+                : [...nombresCanchas, partido.cancha];
+
+            const divEtq = eqA.division && eqA.division !== '-' ? ` • ${eqA.division}` : '';
+            const diaTvT = getDiaTvT(partido);
+
+            return `
+                <div class="bg-white rounded-2xl border ${tieneChoque ? 'border-amber-400 bg-amber-50/30' : 'border-slate-200'} p-4 shadow-glass space-y-3">
+                    <div class="flex flex-wrap items-center justify-between gap-2 text-[11px] font-black uppercase">
+                        <div class="flex items-center gap-2">
+                            <span class="px-2.5 py-1 rounded-lg bg-blue-50 text-brand-electric">${bloqueEtiqueta}${divEtq}</span>
+                            <span class="px-2 py-0.5 rounded-lg bg-slate-100 text-slate-700">Día ${diaTvT}</span>
+                        </div>
+                        <span class="${tieneChoque ? 'text-amber-700' : 'text-slate-500'}">
+                            ${tieneChoque ? '<i class="fas fa-triangle-exclamation mr-1"></i>Choque de cancha y horario' : (partido.ganadorId ? `<span class="text-emerald-600">Resultado: ${partido.setsA}-${partido.setsB}</span>` : 'Pendiente')}
+                        </span>
+                    </div>
+
+                    <div class="grid grid-cols-1 lg:grid-cols-12 gap-3 items-center">
+                        <div class="lg:col-span-4 font-black text-xs text-slate-900">
+                            <span>${eqA.club}</span>
+                            <span class="mx-2 text-brand-orange">VS</span>
+                            <span>${eqB.club}</span>
+                        </div>
+
+                        <div class="lg:col-span-8 grid grid-cols-2 sm:grid-cols-4 gap-2">
+                            <div>
+                                <label class="block text-[10px] font-extrabold uppercase text-slate-400 mb-0.5">Cancha</label>
+                                <select onchange="actualizarProgramacionPartido('${origen}', ${grupoIdx}, ${partidoIdx}, 'cancha', this.value)" class="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-brand-electric">
+                                    <option value="">Sin cancha</option>
+                                    ${opcionesCancha.map((c) => `<option value="${c}" ${partido.cancha === c ? 'selected' : ''}>${c}</option>`).join('')}
+                                </select>
+                            </div>
+
+                            <div>
+                                <label class="block text-[10px] font-extrabold uppercase text-slate-400 mb-0.5">Fecha</label>
+                                <input type="date" value="${partido.dia || ''}" onchange="actualizarProgramacionPartido('${origen}', ${grupoIdx}, ${partidoIdx}, 'dia', this.value)" class="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-brand-electric">
+                            </div>
+
+                            <div>
+                                <label class="block text-[10px] font-extrabold uppercase text-slate-400 mb-0.5">Hora</label>
+                                <input type="time" value="${partido.hora || ''}" onchange="actualizarProgramacionPartido('${origen}', ${grupoIdx}, ${partidoIdx}, 'hora', this.value)" class="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-brand-electric">
+                            </div>
+
+                            <div>
+                                <label class="block text-[10px] font-extrabold uppercase text-slate-400 mb-0.5">Orden</label>
+                                <input type="number" min="1" max="999" placeholder="#" value="${partido.orden || ''}" onchange="actualizarProgramacionPartido('${origen}', ${grupoIdx}, ${partidoIdx}, 'orden', this.value)" class="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-brand-electric">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
 
         return `
-            <div class="bg-white rounded-2xl border ${tieneChoque ? 'border-amber-400 bg-amber-50/30' : 'border-slate-200'} p-4 shadow-glass space-y-3">
-                <div class="flex flex-wrap items-center justify-between gap-2 text-[11px] font-black uppercase">
-                    <div class="flex items-center gap-2">
-                        <span class="px-2.5 py-1 rounded-lg bg-blue-50 text-brand-electric">${bloqueEtiqueta}${divEtq}</span>
-                        <span class="text-slate-400">Día ${diaTvT}</span>
-                    </div>
-                    <span class="${tieneChoque ? 'text-amber-700' : 'text-slate-500'}">
-                        ${tieneChoque ? '<i class="fas fa-triangle-exclamation mr-1"></i>Choque de cancha y horario' : (partido.ganadorId ? `<span class="text-emerald-600">Resultado: ${partido.setsA}-${partido.setsB}</span>` : 'Pendiente')}
+            <div class="rounded-3xl border border-slate-200/90 bg-slate-50/70 p-4 space-y-3">
+                <div class="flex items-center justify-between gap-2 px-1">
+                    <span class="text-xs font-black uppercase tracking-wider text-brand-dark">
+                        <i class="fas fa-calendar-day text-brand-electric mr-1.5"></i> ${bloque.titulo}
+                    </span>
+                    <span class="px-2.5 py-0.5 rounded-lg bg-white border border-slate-200 text-[11px] font-black text-slate-600">
+                        ${bloque.items.length} juego(s)
                     </span>
                 </div>
-
-                <div class="grid grid-cols-1 lg:grid-cols-12 gap-3 items-center">
-                    <div class="lg:col-span-4 font-black text-xs text-slate-900">
-                        <span>${eqA.club}</span>
-                        <span class="mx-2 text-brand-orange">VS</span>
-                        <span>${eqB.club}</span>
-                    </div>
-
-                    <div class="lg:col-span-8 grid grid-cols-2 sm:grid-cols-4 gap-2">
-                        <div>
-                            <label class="block text-[10px] font-extrabold uppercase text-slate-400 mb-0.5">Cancha</label>
-                            <select onchange="actualizarProgramacionPartido('${origen}', ${grupoIdx}, ${partidoIdx}, 'cancha', this.value)" class="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-brand-electric">
-                                <option value="">Sin cancha</option>
-                                ${opcionesCancha.map((c) => `<option value="${c}" ${partido.cancha === c ? 'selected' : ''}>${c}</option>`).join('')}
-                            </select>
-                        </div>
-
-                        <div>
-                            <label class="block text-[10px] font-extrabold uppercase text-slate-400 mb-0.5">Fecha</label>
-                            <input type="date" value="${partido.dia || ''}" onchange="actualizarProgramacionPartido('${origen}', ${grupoIdx}, ${partidoIdx}, 'dia', this.value)" class="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-brand-electric">
-                        </div>
-
-                        <div>
-                            <label class="block text-[10px] font-extrabold uppercase text-slate-400 mb-0.5">Hora</label>
-                            <input type="time" value="${partido.hora || ''}" onchange="actualizarProgramacionPartido('${origen}', ${grupoIdx}, ${partidoIdx}, 'hora', this.value)" class="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-brand-electric">
-                        </div>
-
-                        <div>
-                            <label class="block text-[10px] font-extrabold uppercase text-slate-400 mb-0.5">Orden</label>
-                            <input type="number" min="1" max="999" placeholder="#" value="${partido.orden || ''}" onchange="actualizarProgramacionPartido('${origen}', ${grupoIdx}, ${partidoIdx}, 'orden', this.value)" class="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-brand-electric">
-                        </div>
-                    </div>
-                </div>
+                <div class="space-y-2.5">${tarjetasHtml}</div>
             </div>
         `;
     }).join('');
@@ -770,10 +850,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const fechaInicioInput = document.getElementById('semFechaInicio');
     if (fechaInicioInput && !fechaInicioInput.value) {
         const hoy = new Date();
-        const yyyy = hoy.getFullYear();
-        const mm = String(hoy.getMonth() + 1).padStart(2, '0');
-        const dd = String(hoy.getDate()).padStart(2, '0');
-        fechaInicioInput.value = `${yyyy}-${mm}-${dd}`;
+        fechaInicioInput.value = formatearFechaISO(hoy);
     }
 
     const orgHeader = document.getElementById('orgHeaderInfo');
@@ -817,6 +894,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             const division = document.getElementById('semDivisionSelect')?.value || 'TODAS';
             const canchaNombre = document.getElementById('semCanchaSelect')?.value || '';
             const fechaBase = document.getElementById('semFechaInicio')?.value || '';
+            const horaComienzo = document.getElementById('semHoraInicio')?.value || '08:00';
             const gruposMarcados = Array.from(
                 document.querySelectorAll('.sem-grupo-check:checked')
             ).map((cb) => cb.value);
@@ -855,20 +933,37 @@ document.addEventListener('DOMContentLoaded', async () => {
                 return;
             }
 
+            // Ordena primero por Día 1 (y días siguientes del todos contra todos) para asignar en orden
+            seleccionados.sort((a, b) => {
+                const diaA = Number(a.partido.diaTodosContraTodos || a.partido.jornada || 999);
+                const diaB = Number(b.partido.diaTodosContraTodos || b.partido.jornada || 999);
+                return diaA - diaB;
+            });
+
             const canchaObj = obtenerCanchaObj(canchaNombre);
             const fechasDisponibles = calcularFechasDisponiblesEnSemana(fechaBase, canchaObj?.diasSemana);
+            const contadorPorFecha = {};
 
             seleccionados.forEach(({ partido }, idx) => {
+                const diaTvT = Number(partido.diaTodosContraTodos || partido.jornada || 1);
+                const fechaAsignada = fechasDisponibles.length > 0
+                    ? fechasDisponibles[(Math.max(1, diaTvT) - 1) % fechasDisponibles.length]
+                    : fechaBase;
+
+                const turnoEnFecha = contadorPorFecha[fechaAsignada] || 0;
+                contadorPorFecha[fechaAsignada] = turnoEnFecha + 1;
+
                 partido.cancha = canchaNombre;
                 partido.divisionSemanal = division;
-                if (fechasDisponibles.length > 0) {
-                    const diaIndice = ((partido.diaTodosContraTodos || partido.jornada || idx + 1) - 1 + Math.floor(idx / fechasDisponibles.length)) % fechasDisponibles.length;
-                    partido.dia = fechasDisponibles[Math.max(0, diaIndice)];
+                if (fechaAsignada) {
+                    partido.dia = fechaAsignada;
                 }
-                if (!partido.orden) {
-                    partido.orden = idx + 1;
-                }
+                partido.hora = sumarMinutosAHora(horaComienzo, turnoEnFecha * DURACION_PARTIDO_MIN);
+                partido.orden = idx + 1;
             });
+
+            const selOrden = document.getElementById('ordenPartidos');
+            if (selOrden) selOrden.value = 'dia1_cancha_fecha';
 
             estado.categoriaActiva = cat;
             renderTodoCalendario();
@@ -879,7 +974,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     .join(', ');
                 const divTexto = division === 'TODAS' ? 'todas las divisiones' : division;
                 msgEl.className = 'text-xs font-bold text-emerald-700';
-                msgEl.textContent = `Asignados ${seleccionados.length} juego(s) de ${cat} (${divTexto} • ${gruposTexto}) en ${canchaNombre} entre ${fechasDisponibles[0] || fechaBase} y ${fechasDisponibles[fechasDisponibles.length - 1] || fechaBase}.`;
+                msgEl.textContent = `Asignados ${seleccionados.length} juego(s) de ${cat} (${divTexto} • ${gruposTexto}) en ${canchaNombre} desde ${fechaBase} a las ${horaComienzo}, ordenados por Día 1.`;
             }
 
             await guardarEnSupabase();
