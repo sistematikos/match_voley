@@ -58,7 +58,7 @@
                 <a href="calendario.html" class="px-3.5 py-2 rounded-xl bg-brand-electric hover:bg-brand-600 text-white text-xs font-black uppercase tracking-wider transition">
                     <i class="fas fa-calendar-days mr-1"></i> Calendario
                 </a>
-                <button onclick="resetearTorneoCompleto()" class="px-3 py-2 rounded-xl bg-white/10 hover:bg-red-500/80 text-xs font-bold transition cursor-pointer">
+                <button type="button" onclick="resetearTorneoCompleto()" class="px-3 py-2 rounded-xl bg-white/10 hover:bg-red-500/80 text-xs font-bold transition cursor-pointer">
                     <i class="fas fa-trash-can mr-1"></i> Nuevo Torneo
                 </button>
             </div>
@@ -71,17 +71,17 @@
         <div class="bg-white rounded-3xl border border-slate-200 p-5 shadow-glass space-y-4">
             <div class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
                 <div class="md:col-span-4">
-                    <label class="block text-[11px] font-extrabold uppercase text-slate-600 mb-1">Nombre del Torneo</label>
+                    <label for="nombreTorneoInput" class="block text-[11px] font-extrabold uppercase text-slate-600 mb-1">Nombre del Torneo</label>
                     <input type="text" id="nombreTorneoInput" placeholder="Ej: Copa Club / Liga Oficial" onchange="actualizarDatosTorneo()" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black text-slate-900 outline-none focus:ring-2 focus:ring-brand-electric">
                 </div>
 
                 <div class="md:col-span-4">
-                    <label class="block text-[11px] font-extrabold uppercase text-slate-600 mb-1">Categoría de Trabajo (Grupos / Tabla / Llaves)</label>
+                    <label for="categoriaActivaSelect" class="block text-[11px] font-extrabold uppercase text-slate-600 mb-1">Categoría de Trabajo (Grupos / Tabla / Llaves)</label>
                     <select id="categoriaActivaSelect" onchange="cambiarCategoriaActiva(this.value)" class="w-full p-2.5 bg-blue-50 border border-brand-electric/30 rounded-xl text-xs font-black text-brand-electric outline-none focus:ring-2 focus:ring-brand-electric"></select>
                 </div>
 
                 <div class="md:col-span-4">
-                    <label class="block text-[11px] font-extrabold uppercase text-slate-600 mb-1">Rama dentro de la Categoría</label>
+                    <label for="filtroRama" class="block text-[11px] font-extrabold uppercase text-slate-600 mb-1">Rama dentro de la Categoría</label>
                     <select id="filtroRama" onchange="renderTodo()" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-brand-electric">
                         <option value="TODAS">Todas las ramas</option>
                         <option value="Femenino">Femenino</option>
@@ -93,13 +93,13 @@
             <!-- REGLAMENTO, DÍAS DE JUEGO Y CONDICIONES DE LA CATEGORÍA ACTIVA -->
             <div class="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2 border-t border-slate-100">
                 <div>
-                    <label class="block text-[11px] font-extrabold uppercase text-slate-500 mb-1">
+                    <label for="diasJuegoCategoria" class="block text-[11px] font-extrabold uppercase text-slate-500 mb-1">
                         <i class="fas fa-calendar-days text-brand-electric mr-1"></i> Días de Juego de esta Categoría
                     </label>
                     <input type="text" id="diasJuegoCategoria" placeholder="Ej: Sábados 8:00 AM - 2:00 PM / Domingos" onchange="actualizarReglaCategoria()" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold outline-none focus:ring-2 focus:ring-brand-electric">
                 </div>
                 <div>
-                    <label class="block text-[11px] font-extrabold uppercase text-slate-500 mb-1">
+                    <label for="condicionesCategoria" class="block text-[11px] font-extrabold uppercase text-slate-500 mb-1">
                         <i class="fas fa-gavel text-brand-orange mr-1"></i> Condiciones y Reglamento de la Categoría
                     </label>
                     <input type="text" id="condicionesCategoria" placeholder="Ej: Sets a 25 pts (3ro a 15), 2 timeouts, rotación oficial" onchange="actualizarReglaCategoria()" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold outline-none focus:ring-2 focus:ring-brand-electric">
@@ -109,15 +109,15 @@
 
         <!-- NAVEGACIÓN DE FASES -->
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <button id="tab-equipos" onclick="cambiarVista('equipos')" class="p-4 rounded-2xl bg-brand-electric text-white font-black text-xs uppercase tracking-wider flex items-center justify-between shadow-electric transition cursor-pointer">
+            <button type="button" id="tab-equipos" onclick="cambiarVista('equipos')" class="p-4 rounded-2xl bg-brand-electric text-white font-black text-xs uppercase tracking-wider flex items-center justify-between shadow-electric transition cursor-pointer">
                 <span><i class="fas fa-users-gear mr-2"></i> 1. Registro de Equipos</span>
                 <span id="badgeEquipos" class="bg-white/20 px-2.5 py-1 rounded-lg">0</span>
             </button>
-            <button id="tab-grupos" onclick="cambiarVista('grupos')" class="p-4 rounded-2xl bg-white text-slate-700 border border-slate-200 hover:border-brand-electric font-black text-xs uppercase tracking-wider flex items-center justify-between transition cursor-pointer">
+            <button type="button" id="tab-grupos" onclick="cambiarVista('grupos')" class="p-4 rounded-2xl bg-white text-slate-700 border border-slate-200 hover:border-brand-electric font-black text-xs uppercase tracking-wider flex items-center justify-between transition cursor-pointer">
                 <span><i class="fas fa-layer-group mr-2"></i> 2. Grupos y Estadística</span>
                 <span id="badgePartidosGrupo" class="bg-slate-100 text-slate-600 px-2.5 py-1 rounded-lg">0</span>
             </button>
-            <button id="tab-eliminatorias" onclick="cambiarVista('eliminatorias')" class="p-4 rounded-2xl bg-white text-slate-700 border border-slate-200 hover:border-brand-electric font-black text-xs uppercase tracking-wider flex items-center justify-between transition cursor-pointer">
+            <button type="button" id="tab-eliminatorias" onclick="cambiarVista('eliminatorias')" class="p-4 rounded-2xl bg-white text-slate-700 border border-slate-200 hover:border-brand-electric font-black text-xs uppercase tracking-wider flex items-center justify-between transition cursor-pointer">
                 <span><i class="fas fa-trophy mr-2"></i> 3. Rondas Eliminatorias</span>
                 <span id="badgeRondaActual" class="bg-amber-100 text-amber-800 px-2.5 py-1 rounded-lg">Pendiente</span>
             </button>
@@ -140,12 +140,12 @@
 
                 <form id="formEquipo" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
                     <div>
-                        <label class="block text-[11px] font-extrabold uppercase text-slate-600 mb-1">Nombre del Club</label>
+                        <label for="clubNombre" class="block text-[11px] font-extrabold uppercase text-slate-600 mb-1">Nombre del Club</label>
                         <input type="text" id="clubNombre" placeholder="Ej: Club Halcones" required class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-brand-electric">
                     </div>
 
                     <div>
-                        <label class="block text-[11px] font-extrabold uppercase text-slate-600 mb-1">Categoría</label>
+                        <label for="categoriaEquipo" class="block text-[11px] font-extrabold uppercase text-slate-600 mb-1">Categoría</label>
                         <select id="categoriaEquipo" required class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-brand-electric">
                             <option value="U9">U9</option>
                             <option value="U11">U11</option>
@@ -158,7 +158,7 @@
                     </div>
 
                     <div>
-                        <label class="block text-[11px] font-extrabold uppercase text-slate-600 mb-1">División</label>
+                        <label for="divisionEquipo" class="block text-[11px] font-extrabold uppercase text-slate-600 mb-1">División</label>
                         <input type="text" id="divisionEquipo" list="listaDivisiones" placeholder="Ej: Primera / Ascenso" required class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-brand-electric">
                         <datalist id="listaDivisiones">
                             <option value="Primera División">
@@ -169,7 +169,7 @@
                     </div>
 
                     <div>
-                        <label class="block text-[11px] font-extrabold uppercase text-slate-600 mb-1">Rama</label>
+                        <label for="ramaEquipo" class="block text-[11px] font-extrabold uppercase text-slate-600 mb-1">Rama</label>
                         <select id="ramaEquipo" required class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-brand-electric">
                             <option value="Femenino">Femenino</option>
                             <option value="Masculino">Masculino</option>
@@ -195,12 +195,12 @@
 
                     <div class="flex flex-wrap items-center gap-2">
                         <div class="flex items-center gap-2 bg-blue-50 border border-brand-electric/20 px-3 py-1.5 rounded-xl">
-                            <label class="text-[11px] font-extrabold text-brand-electric uppercase">Cuántos grupos:</label>
+                            <label for="cantidadGrupos" class="text-[11px] font-extrabold text-brand-electric uppercase">Cuántos grupos:</label>
                             <input type="number" id="cantidadGrupos" value="2" min="1" max="20" onchange="actualizarCantidadGruposInput(this.value)" class="w-14 p-1 bg-white border border-slate-200 rounded-lg text-xs font-black text-center">
                         </div>
 
                         <div class="flex items-center gap-2 bg-amber-50 border border-amber-300/60 px-3 py-1.5 rounded-xl">
-                            <label class="text-[11px] font-extrabold text-amber-800 uppercase">Días todos vs todos:</label>
+                            <label for="diasTodosContraTodos" class="text-[11px] font-extrabold text-amber-800 uppercase">Días todos vs todos:</label>
                             <input type="number" id="diasTodosContraTodos" value="1" min="1" max="30" onchange="actualizarDiasTodosContraTodosInput(this.value)" class="w-14 p-1 bg-white border border-slate-200 rounded-lg text-xs font-black text-center">
                         </div>
 
@@ -256,10 +256,10 @@
                     </p>
                 </div>
                 <div class="flex flex-wrap gap-2">
-                    <button onclick="solicitarPaseEliminatoria(16)" class="py-3 px-4 bg-brand-orange hover:bg-orange-600 text-white font-black text-xs uppercase rounded-xl shadow transition cursor-pointer">
+                    <button type="button" onclick="solicitarPaseEliminatoria(16)" class="py-3 px-4 bg-brand-orange hover:bg-orange-600 text-white font-black text-xs uppercase rounded-xl shadow transition cursor-pointer">
                         <i class="fas fa-sitemap mr-1"></i> Pasar a 16vos
                     </button>
-                    <button onclick="solicitarPaseEliminatoria(8)" class="py-3 px-4 bg-brand-electric hover:bg-brand-600 text-white font-black text-xs uppercase rounded-xl shadow-electric transition cursor-pointer">
+                    <button type="button" onclick="solicitarPaseEliminatoria(8)" class="py-3 px-4 bg-brand-electric hover:bg-brand-600 text-white font-black text-xs uppercase rounded-xl shadow-electric transition cursor-pointer">
                         <i class="fas fa-trophy mr-1"></i> Pasar a 8vos
                     </button>
                 </div>
@@ -307,13 +307,13 @@
                     </p>
                 </div>
                 <div class="flex flex-wrap gap-2">
-                    <button onclick="solicitarPaseEliminatoria(16)" class="py-2.5 px-3.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-black text-xs uppercase rounded-xl cursor-pointer">
+                    <button type="button" onclick="solicitarPaseEliminatoria(16)" class="py-2.5 px-3.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-black text-xs uppercase rounded-xl cursor-pointer">
                         Iniciar desde 16vos
                     </button>
-                    <button onclick="solicitarPaseEliminatoria(8)" class="py-2.5 px-3.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-black text-xs uppercase rounded-xl cursor-pointer">
+                    <button type="button" onclick="solicitarPaseEliminatoria(8)" class="py-2.5 px-3.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-black text-xs uppercase rounded-xl cursor-pointer">
                         Iniciar desde 8vos
                     </button>
-                    <button id="btnAvanzarSiguienteRonda" onclick="avanzarSiguienteRondaElim()" class="hidden py-2.5 px-4 bg-brand-electric hover:bg-brand-600 text-white font-black text-xs uppercase rounded-xl shadow-electric cursor-pointer">
+                    <button type="button" id="btnAvanzarSiguienteRonda" onclick="avanzarSiguienteRondaElim()" class="hidden py-2.5 px-4 bg-brand-electric hover:bg-brand-600 text-white font-black text-xs uppercase rounded-xl shadow-electric cursor-pointer">
                         <i class="fas fa-forward-step mr-1"></i> Avanzar a Siguiente Ronda
                     </button>
                 </div>
@@ -339,10 +339,10 @@
             <h3 id="modalElimTitulo" class="text-base font-black uppercase text-slate-900">Confirmar Pase a Eliminatorias</h3>
             <p id="modalElimTexto" class="text-xs text-slate-600 leading-relaxed font-semibold"></p>
             <div class="flex justify-end gap-2 pt-2">
-                <button onclick="cerrarModalElim()" class="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-black uppercase text-slate-700 cursor-pointer">
+                <button type="button" onclick="cerrarModalElim()" class="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-black uppercase text-slate-700 cursor-pointer">
                     Cancelar
                 </button>
-                <button id="btnConfirmarElim" class="px-4 py-2.5 rounded-xl bg-brand-electric hover:bg-brand-600 text-xs font-black uppercase text-white shadow-electric cursor-pointer">
+                <button type="button" id="btnConfirmarElim" class="px-4 py-2.5 rounded-xl bg-brand-electric hover:bg-brand-600 text-xs font-black uppercase text-white shadow-electric cursor-pointer">
                     Sí, Generar Cruces
                 </button>
             </div>
@@ -368,22 +368,22 @@
                 <input type="hidden" id="editEquipoId">
 
                 <div>
-                    <label class="block text-[11px] font-extrabold uppercase text-slate-600 mb-1">Nombre del Club</label>
+                    <label for="editClubNombre" class="block text-[11px] font-extrabold uppercase text-slate-600 mb-1">Nombre del Club</label>
                     <input type="text" id="editClubNombre" required class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-brand-electric">
                 </div>
 
                 <div>
-                    <label class="block text-[11px] font-extrabold uppercase text-slate-600 mb-1">Categoría</label>
+                    <label for="editCategoriaEquipo" class="block text-[11px] font-extrabold uppercase text-slate-600 mb-1">Categoría</label>
                     <select id="editCategoriaEquipo" required class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-brand-electric"></select>
                 </div>
 
                 <div>
-                    <label class="block text-[11px] font-extrabold uppercase text-slate-600 mb-1">División</label>
+                    <label for="editDivisionEquipo" class="block text-[11px] font-extrabold uppercase text-slate-600 mb-1">División</label>
                     <input type="text" id="editDivisionEquipo" list="listaDivisiones" required class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-brand-electric">
                 </div>
 
                 <div>
-                    <label class="block text-[11px] font-extrabold uppercase text-slate-600 mb-1">Rama</label>
+                    <label for="editRamaEquipo" class="block text-[11px] font-extrabold uppercase text-slate-600 mb-1">Rama</label>
                     <select id="editRamaEquipo" required class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-brand-electric">
                         <option value="Femenino">Femenino</option>
                         <option value="Masculino">Masculino</option>
