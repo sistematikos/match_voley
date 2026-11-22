@@ -29,6 +29,7 @@ function crearEstructuraCategoria(nombreCat) {
         diasJuego: '',
         condiciones: '',
         cantidadGrupos: 2,
+        diasTodosContraTodos: 1,
         grupos: [],
         eliminatoria: {
             rondaActual: null,
@@ -47,6 +48,10 @@ function estadoInicial() {
     return {
         nombreTorneo: 'Torneo Oficial de Voleibol',
         categoriaActiva: 'U9',
+        canchas: [
+            { nombre: 'Cancha 1', diasSemana: [6, 0] },
+            { nombre: 'Cancha 2', diasSemana: [6, 0] }
+        ],
         equipos: [],
         categoriasData
     };
@@ -108,6 +113,14 @@ function hidratarEstadoDesdeObjeto(nube) {
                 ...existente,
                 ...(valor || {}),
                 nombre: catNormalizada,
+                cantidadGrupos: Math.max(
+                    1,
+                    Math.min(20, parseInt(valor?.cantidadGrupos, 10) || existente.cantidadGrupos || 2)
+                ),
+                diasTodosContraTodos: Math.max(
+                    1,
+                    Math.min(30, parseInt(valor?.diasTodosContraTodos, 10) || existente.diasTodosContraTodos || 1)
+                ),
                 grupos: Array.isArray(valor?.grupos) ? valor.grupos : [],
                 eliminatoria: {
                     ...existente.eliminatoria,
@@ -131,6 +144,7 @@ function hidratarEstadoDesdeObjeto(nube) {
         ...(nube || {}),
         nombreTorneo: (nube?.nombreTorneo || base.nombreTorneo).trim() || base.nombreTorneo,
         categoriaActiva,
+        canchas: Array.isArray(nube?.canchas) && nube.canchas.length > 0 ? nube.canchas : base.canchas,
         equipos: equiposNormalizados,
         categoriasData
     };
@@ -373,12 +387,123 @@ async function actualizarReglaCategoria() {
     await guardarEnSupabase();
 }
 
+function sincronizarBorradoresGruposConCantidad(catData) {
+    const letras = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    const numGrupos = Math.max(1, Math.min(20, parseInt(catData.cantidadGrupos, 10) || 1));
+
+    if (!Array.isArray(catData.grupos)) {
+        catData.grupos = [];
+    }
+
+    while (catData.grupos.length < numGrupos) {
+        const idx = catData.grupos.length;
+        catData.grupos.push({
+            nombre: `Grupo ${letras[idx] || idx + 1}`,
+            equiposIds: [],
+            partidos: []
+        });
+    }
+
+    if (catData.grupos.length > numGrupos) {
+        catData.grupos = catData.grupos.slice(0, numGrupos);
+    }
+
+    catData.grupos.forEach((g, idx) => {
+        g.nombre = g.nombre || `Grupo ${letras[idx] || idx + 1}`;
+        g.equiposIds = Array.isArray(g.equiposIds) ? Array.from(new Set(g.equiposIds)) : [];
+        g.partidos = Array.isArray(g.partidos) ? g.partidos : [];
+    });
+}
+
 function actualizarCantidadGruposInput(valor) {
     const catData = obtenerDatosCategoriaActiva();
     const num = parseInt(valor, 10);
     catData.cantidadGrupos = Number.isNaN(num) || num < 1 ? 1 : Math.min(num, 20);
+    sincronizarBorradoresGruposConCantidad(catData);
+    renderResumenGruposCategoria();
+    renderConstructorManualGrupos();
+    guardarEstado();
+}
+
+function actualizarDiasTodosContraTodosInput(valor) {
+    const catData = obtenerDatosCategoriaActiva();
+    const num = parseInt(valor, 10);
+    catData.diasTodosContraTodos = Number.isNaN(num) || num < 1 ? 1 : Math.min(num, 30);
     renderResumenGruposCategoria();
     guardarEstado();
+}
+
+function alternarEquipoEnGrupoManual(grupoIdx, equipoId, marcado) {
+    const catData = obtenerDatosCategoriaActiva();
+    sincronizarBorradoresGruposConCantidad(catData);
+
+    const grupo = catData.grupos[grupoIdx];
+    if (!grupo) return;
+
+    const setIds = new Set(grupo.equiposIds || []);
+    if (marcado) {
+        setIds.add(equipoId);
+    } else {
+        setIds.delete(equipoId);
+    }
+    grupo.equiposIds = Array.from(setIds);
+
+    renderResumenGruposCategoria();
+    renderConstructorManualGrupos();
+    guardarEstado();
+}
+
+async function limpiarAsignacionManualGrupos() {
+    const catData = obtenerDatosCategoriaActiva();
+    sincronizarBorradoresGruposConCantidad(catData);
+    catData.grupos.forEach((g) => {
+        g.equiposIds = [];
+        g.partidos = [];
+    });
+    renderTodo();
+    await guardarEnSupabase();
+}
+
+function renderConstructorManualGrupos() {
+    const catActiva = asegurarCategoria(estado.categoriaActiva);
+    const catData = obtenerDatosCategoriaActiva();
+    sincronizarBorradoresGruposConCantidad(catData);
+
+    const cont = document.getElementById('constructorManualGrupos');
+    if (!cont) return;
+
+    const poolEquipos = obtenerEquiposDeCategoriaFiltrados();
+    if (poolEquipos.length === 0) {
+        cont.innerHTML = `<div class="col-span-full p-4 rounded-2xl bg-slate-50 border border-slate-200 text-xs text-slate-500 font-semibold">Registra equipos en <strong>${catActiva}</strong> para asignarlos manualmente a los grupos.</div>`;
+        return;
+    }
+
+    cont.innerHTML = catData.grupos.map((grupo, gIdx) => {
+        const seleccionados = new Set(grupo.equiposIds || []);
+
+        const checksHtml = poolEquipos.map((eq) => {
+            const checked = seleccionados.has(eq.id);
+            return `
+                <label class="flex items-center justify-between gap-2 p-2 rounded-xl border ${checked ? 'border-brand-electric bg-blue-50/70' : 'border-slate-200 bg-white'} cursor-pointer transition">
+                    <span class="flex items-center gap-2 truncate">
+                        <input type="checkbox" ${checked ? 'checked' : ''} onchange="alternarEquipoEnGrupoManual(${gIdx}, '${eq.id}', this.checked)" class="rounded text-brand-electric focus:ring-brand-electric">
+                        <span class="text-xs font-black text-slate-800 truncate">${eq.club}</span>
+                    </span>
+                    <span class="text-[10px] font-bold text-slate-500 shrink-0">${eq.rama} • ${eq.division}</span>
+                </label>
+            `;
+        }).join('');
+
+        return `
+            <div class="p-4 rounded-2xl border border-slate-200 bg-slate-50/60 space-y-2.5">
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-black uppercase text-brand-electric">${grupo.nombre}</span>
+                    <span class="px-2 py-0.5 rounded-lg bg-white border border-slate-200 text-[11px] font-black text-slate-700">${seleccionados.size} equipo(s)</span>
+                </div>
+                <div class="space-y-1.5 max-h-52 overflow-y-auto pr-1">${checksHtml}</div>
+            </div>
+        `;
+    }).join('');
 }
 
 function cambiarVista(vista) {
@@ -413,13 +538,20 @@ function actualizarBadges() {
     const equiposCat = obtenerEquiposDeCategoriaFiltrados();
 
     document.getElementById('badgeEquipos').textContent = equiposCat.length;
-    const totalPartidosGrupo = (catData.grupos || []).reduce((acc, g) => acc + g.partidos.length, 0);
+    const totalPartidosGrupo = (catData.grupos || []).reduce((acc, g) => acc + (g.partidos?.length || 0), 0);
     document.getElementById('badgePartidosGrupo').textContent = totalPartidosGrupo;
     document.getElementById('badgeRondaActual').textContent = catData.eliminatoria?.rondaActual || 'Pendiente';
 }
 
 async function eliminarEquipo(id) {
     estado.equipos = estado.equipos.filter((eq) => eq.id !== id);
+    Object.values(estado.categoriasData || {}).forEach((catData) => {
+        if (Array.isArray(catData.grupos)) {
+            catData.grupos.forEach((g) => {
+                g.equiposIds = (g.equiposIds || []).filter((eqId) => eqId !== id);
+            });
+        }
+    });
     renderTodo();
     await guardarEnSupabase();
 }
@@ -429,17 +561,18 @@ function renderResumenGruposCategoria() {
     const catData = obtenerDatosCategoriaActiva();
     const equiposCat = obtenerEquiposDeCategoriaFiltrados();
     const inputGrupos = document.getElementById('cantidadGrupos');
+    const inputDias = document.getElementById('diasTodosContraTodos');
     const resumen = document.getElementById('resumenGruposSugeridos');
 
-    if (inputGrupos) {
-        inputGrupos.value = catData.cantidadGrupos || 2;
-    }
+    if (inputGrupos) inputGrupos.value = catData.cantidadGrupos || 2;
+    if (inputDias) inputDias.value = catData.diasTodosContraTodos || 1;
 
     if (resumen) {
-        const gruposEfectivos = Math.min(catData.cantidadGrupos || 1, Math.max(equiposCat.length, 1));
+        const dias = Math.max(1, parseInt(catData.diasTodosContraTodos, 10) || 1);
+        const grupos = Math.max(1, parseInt(catData.cantidadGrupos, 10) || 1);
         resumen.textContent = equiposCat.length > 0
-            ? `En ${catActiva} hay ${equiposCat.length} equipo(s) → se formarán ${gruposEfectivos} grupo(s) al generar.`
-            : `Registra equipos en ${catActiva} para armar sus grupos.`;
+            ? `Categoría ${catActiva}: ${equiposCat.length} equipo(s) disponibles • ${grupos} grupo(s) • Todos vs todos en ${dias} día(s).`
+            : `Registra equipos en ${catActiva} para armar sus grupos manuales.`;
     }
 }
 
@@ -450,6 +583,7 @@ function renderEquipos() {
     document.getElementById('tituloCategoriaEquipos').textContent = catActiva;
     document.getElementById('totalEquiposTexto').textContent = filtrados.length;
     renderResumenGruposCategoria();
+    renderConstructorManualGrupos();
 
     const tbody = document.getElementById('tablaEquiposBody');
 
@@ -490,55 +624,69 @@ function renderEquipos() {
 async function generarFaseGruposCategoria() {
     const catActiva = asegurarCategoria(estado.categoriaActiva);
     const catData = obtenerDatosCategoriaActiva();
-    const poolEquipos = obtenerEquiposDeCategoriaFiltrados();
+    sincronizarBorradoresGruposConCantidad(catData);
 
-    if (poolEquipos.length < 2) {
-        alert(`Necesitas al menos 2 equipos en la categoría "${catActiva}" para generar grupos.`);
+    const diasTotales = Math.max(
+        1,
+        Math.min(30, parseInt(document.getElementById('diasTodosContraTodos')?.value, 10) || catData.diasTodosContraTodos || 1)
+    );
+    catData.diasTodosContraTodos = diasTotales;
+    catData.cantidadGrupos = catData.grupos.length;
+
+    const idsValidos = new Set(obtenerEquiposDeCategoriaFiltrados().map((e) => e.id));
+    let totalGenerados = 0;
+
+    catData.grupos.forEach((grupo, gIdx) => {
+        const ids = (grupo.equiposIds || []).filter((id) => idsValidos.has(id));
+        grupo.equiposIds = ids;
+
+        const cruces = [];
+        for (let i = 0; i < ids.length; i++) {
+            for (let j = i + 1; j < ids.length; j++) {
+                cruces.push({ eqA: ids[i], eqB: ids[j] });
+            }
+        }
+
+        const partidosAnteriores = Array.isArray(grupo.partidos) ? grupo.partidos : [];
+
+        grupo.partidos = cruces.map((cruce, idx) => {
+            const diaRonda = (idx % diasTotales) + 1;
+            const previo = partidosAnteriores.find(
+                (p) => (p.eqA === cruce.eqA && p.eqB === cruce.eqB) || (p.eqA === cruce.eqB && p.eqB === cruce.eqA)
+            );
+
+            return {
+                id: previo?.id || `grp_${catActiva}_${gIdx}_p_${idx}`,
+                jornada: diaRonda,
+                diaTodosContraTodos: diaRonda,
+                eqA: cruce.eqA,
+                eqB: cruce.eqB,
+                sets: previo?.sets || [
+                    { a: '', b: '' },
+                    { a: '', b: '' },
+                    { a: '', b: '' }
+                ],
+                ganadorId: previo?.ganadorId || null,
+                setsA: previo?.setsA || 0,
+                setsB: previo?.setsB || 0,
+                ptsA: previo?.ptsA || 0,
+                ptsB: previo?.ptsB || 0,
+                cancha: previo?.cancha || '',
+                dia: previo?.dia || '',
+                hora: previo?.hora || '',
+                orden: previo?.orden || idx + 1
+            };
+        });
+
+        totalGenerados += grupo.partidos.length;
+    });
+
+    if (totalGenerados === 0) {
+        alert(`Selecciona manualmente al menos 2 equipos en uno o más grupos de "${catActiva}" para generar los partidos todos contra todos.`);
+        renderTodo();
         return;
     }
 
-    let numGrupos = parseInt(document.getElementById('cantidadGrupos').value, 10) || catData.cantidadGrupos || 1;
-    numGrupos = Math.min(Math.max(numGrupos, 1), poolEquipos.length);
-    catData.cantidadGrupos = numGrupos;
-
-    const letras = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-    const gruposTemp = Array.from({ length: numGrupos }, (_, i) => ({
-        nombre: `Grupo ${letras[i] || i + 1}`,
-        equiposIds: [],
-        partidos: []
-    }));
-
-    poolEquipos.forEach((eq, index) => {
-        const grupoIdx = index % numGrupos;
-        gruposTemp[grupoIdx].equiposIds.push(eq.id);
-    });
-
-    gruposTemp.forEach((grupo, gIdx) => {
-        const ids = grupo.equiposIds;
-        let jornadaNum = 1;
-        for (let i = 0; i < ids.length; i++) {
-            for (let j = i + 1; j < ids.length; j++) {
-                grupo.partidos.push({
-                    id: `grp_${catActiva}_${gIdx}_p_${i}_${j}`,
-                    jornada: jornadaNum++,
-                    eqA: ids[i],
-                    eqB: ids[j],
-                    sets: [
-                        { a: '', b: '' },
-                        { a: '', b: '' },
-                        { a: '', b: '' }
-                    ],
-                    ganadorId: null,
-                    setsA: 0,
-                    setsB: 0,
-                    ptsA: 0,
-                    ptsB: 0
-                });
-            }
-        }
-    });
-
-    catData.grupos = gruposTemp;
     renderTodo();
     cambiarVista('grupos');
     await guardarEnSupabase();
@@ -680,16 +828,20 @@ function renderGruposYEstadistica() {
     document.getElementById('etiquetaCatGrupos').textContent = `Categoría: ${catActiva}`;
     document.getElementById('tituloCatTabla').textContent = catActiva;
 
-    if (!catData.grupos || catData.grupos.length === 0) {
+    const gruposConPartidos = (catData.grupos || []).filter((g) => Array.isArray(g.partidos) && g.partidos.length > 0);
+
+    if (gruposConPartidos.length === 0) {
         cont.innerHTML = `
             <div class="bg-white rounded-3xl border border-slate-200 p-8 text-center space-y-2">
-                <p class="text-sm font-black text-slate-700">Aún no se han generado los grupos de ${catActiva}</p>
-                <p class="text-xs text-slate-500">Ve a <strong>1. Registro de Equipos</strong>, indica cuántos grupos tendrá <strong>${catActiva}</strong> y presiona <strong>Generar Grupos de la Categoría</strong>.</p>
+                <p class="text-sm font-black text-slate-700">Aún no se han generado los partidos todos contra todos de ${catActiva}</p>
+                <p class="text-xs text-slate-500">Ve a <strong>1. Registro de Equipos</strong>, asigna manualmente los equipos a cada grupo, indica cuántos días durará el todos contra todos y presiona <strong>Generar Todos vs Todos</strong>.</p>
             </div>
         `;
     } else {
-        cont.innerHTML = catData.grupos
+        cont.innerHTML = (catData.grupos || [])
             .map((grupo, gIdx) => {
+                if (!grupo.partidos || grupo.partidos.length === 0) return '';
+
                 const partidosHtml = grupo.partidos
                     .map((p, pIdx) => {
                         const eqA = obtenerEquipoPorId(p.eqA);
@@ -702,7 +854,7 @@ function renderGruposYEstadistica() {
                         return `
                             <div class="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-3">
                                 <div class="flex items-center justify-between text-[11px] font-black text-slate-400 uppercase">
-                                    <span>Partido #${pIdx + 1} • Jornada ${p.jornada}</span>
+                                    <span>Partido #${pIdx + 1} • Día ${p.diaTodosContraTodos || p.jornada || 1}</span>
                                     <span>${p.ganadorId ? `<span class="text-emerald-600"><i class="fas fa-check-circle mr-1"></i>Ganador: ${obtenerEquipoPorId(p.ganadorId).club}</span>` : 'Pendiente (Gana 2 sets)'}</span>
                                 </div>
 
@@ -1056,6 +1208,9 @@ window.cambiarCategoriaActiva = cambiarCategoriaActiva;
 window.actualizarDatosTorneo = actualizarDatosTorneo;
 window.actualizarReglaCategoria = actualizarReglaCategoria;
 window.actualizarCantidadGruposInput = actualizarCantidadGruposInput;
+window.actualizarDiasTodosContraTodosInput = actualizarDiasTodosContraTodosInput;
+window.alternarEquipoEnGrupoManual = alternarEquipoEnGrupoManual;
+window.limpiarAsignacionManualGrupos = limpiarAsignacionManualGrupos;
 window.abrirModalEditarEquipo = abrirModalEditarEquipo;
 window.cerrarModalEditarEquipo = cerrarModalEditarEquipo;
 window.eliminarEquipo = eliminarEquipo;
