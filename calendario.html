@@ -75,7 +75,7 @@
             <form id="formAgregarCancha" class="space-y-3 pt-2 border-t border-slate-100">
                 <div class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
                     <div class="md:col-span-5">
-                        <label class="block text-[11px] font-extrabold uppercase text-slate-600 mb-1">
+                        <label for="nuevaCanchaNombre" class="block text-[11px] font-extrabold uppercase text-slate-600 mb-1">
                             <i class="fas fa-location-dot text-brand-electric mr-1"></i> Nombre de la Cancha
                         </label>
                         <input type="text" id="nuevaCanchaNombre" placeholder="Ej: Cancha 1 / Cancha Central / Coliseo B" required class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-brand-electric">
@@ -126,38 +126,45 @@
             <div id="listaCanchasConfiguradas" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3"></div>
         </div>
 
-        <!-- 2. PROGRAMACIÓN SEMANAL AUTOMÁTICA (CATEGORÍA, DIVISIÓN, GRUPOS Y CANCHA) -->
+        <!-- 2. PROGRAMACIÓN SEMANAL AUTOMÁTICA (CATEGORÍA, DIVISIÓN, GRUPOS, CANCHA Y HORA DE COMIENZO) -->
         <div class="bg-white rounded-3xl border border-slate-200 p-6 shadow-glass space-y-4">
             <div class="flex flex-wrap items-center justify-between gap-3">
                 <div>
                     <h3 class="text-base font-black uppercase text-slate-900">
-                        <i class="fas fa-wand-magic-sparkles text-brand-orange mr-1.5"></i> 2. Juegos de Esta Semana (Asignación Automática)
+                        <i class="fas fa-wand-magic-sparkles text-brand-orange mr-1.5"></i> 2. Juegos de Esta Semana (Asignación por Día 1, Cancha y Hora)
                     </h3>
-                    <p class="text-xs text-slate-500 font-semibold">Indica qué categoría, división y grupos juegan esta semana y en qué cancha para repartir los partidos en sus días habilitados.</p>
+                    <p class="text-xs text-slate-500 font-semibold">Elige categoría, división, grupos, cancha, fecha y hora de comienzo para ordenar primero el Día 1 y repartir los partidos.</p>
                 </div>
                 <div id="alertaChoques" class="hidden px-3.5 py-2 rounded-xl bg-amber-50 border border-amber-300 text-amber-800 text-xs font-extrabold"></div>
             </div>
 
             <form id="formProgramacionSemanal" class="space-y-4 pt-2 border-t border-slate-100">
-                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
                     <div>
-                        <label class="block text-[11px] font-extrabold uppercase text-slate-600 mb-1">Categoría</label>
+                        <label for="semCategoriaSelect" class="block text-[11px] font-extrabold uppercase text-slate-600 mb-1">Categoría</label>
                         <select id="semCategoriaSelect" onchange="actualizarOpcionesSemana()" required class="w-full p-2.5 bg-blue-50 border border-brand-electric/30 rounded-xl text-xs font-black text-brand-electric outline-none focus:ring-2 focus:ring-brand-electric"></select>
                     </div>
 
                     <div>
-                        <label class="block text-[11px] font-extrabold uppercase text-slate-600 mb-1">División</label>
+                        <label for="semDivisionSelect" class="block text-[11px] font-extrabold uppercase text-slate-600 mb-1">División</label>
                         <select id="semDivisionSelect" onchange="actualizarOpcionesSemana()" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-brand-electric"></select>
                     </div>
 
                     <div>
-                        <label class="block text-[11px] font-extrabold uppercase text-slate-600 mb-1">Cancha Asignada</label>
+                        <label for="semCanchaSelect" class="block text-[11px] font-extrabold uppercase text-slate-600 mb-1">Cancha Específica</label>
                         <select id="semCanchaSelect" required class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-brand-electric"></select>
                     </div>
 
                     <div>
-                        <label class="block text-[11px] font-extrabold uppercase text-slate-600 mb-1">Semana Desde (Fecha Base)</label>
+                        <label for="semFechaInicio" class="block text-[11px] font-extrabold uppercase text-slate-600 mb-1">Fecha Específica</label>
                         <input type="date" id="semFechaInicio" required class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-brand-electric">
+                    </div>
+
+                    <div>
+                        <label for="semHoraInicio" class="block text-[11px] font-extrabold uppercase text-slate-600 mb-1">
+                            <i class="fas fa-clock text-brand-electric mr-1"></i> Hora de Comienzo
+                        </label>
+                        <input type="time" id="semHoraInicio" value="08:00" required class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-brand-electric">
                     </div>
                 </div>
 
@@ -199,28 +206,29 @@
 
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 pt-2 border-t border-slate-100">
                 <div>
-                    <label class="block text-[11px] font-extrabold uppercase text-slate-600 mb-1">Categoría</label>
+                    <label for="categoriaSelect" class="block text-[11px] font-extrabold uppercase text-slate-600 mb-1">Categoría</label>
                     <select id="categoriaSelect" onchange="cambiarCategoria(this.value)" class="w-full p-2.5 bg-blue-50 border border-brand-electric/30 rounded-xl text-xs font-black text-brand-electric outline-none focus:ring-2 focus:ring-brand-electric"></select>
                 </div>
 
                 <div>
-                    <label class="block text-[11px] font-extrabold uppercase text-slate-600 mb-1">Grupo / Fase</label>
+                    <label for="filtroGrupo" class="block text-[11px] font-extrabold uppercase text-slate-600 mb-1">Grupo / Fase</label>
                     <select id="filtroGrupo" onchange="renderTodoCalendario()" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-brand-electric"></select>
                 </div>
 
                 <div>
-                    <label class="block text-[11px] font-extrabold uppercase text-slate-600 mb-1">Cancha</label>
+                    <label for="filtroCancha" class="block text-[11px] font-extrabold uppercase text-slate-600 mb-1">Cancha</label>
                     <select id="filtroCancha" onchange="renderTodoCalendario()" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-brand-electric"></select>
                 </div>
 
                 <div>
-                    <label class="block text-[11px] font-extrabold uppercase text-slate-600 mb-1">Fecha</label>
+                    <label for="filtroFecha" class="block text-[11px] font-extrabold uppercase text-slate-600 mb-1">Fecha</label>
                     <select id="filtroFecha" onchange="renderTodoCalendario()" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-brand-electric"></select>
                 </div>
 
                 <div>
-                    <label class="block text-[11px] font-extrabold uppercase text-slate-600 mb-1">Ordenar Por</label>
+                    <label for="ordenPartidos" class="block text-[11px] font-extrabold uppercase text-slate-600 mb-1">Ordenar Por</label>
                     <select id="ordenPartidos" onchange="renderTodoCalendario()" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-brand-electric">
+                        <option value="dia1_cancha_fecha" selected>Día 1 • Cancha y Fecha</option>
                         <option value="orden">Orden / Día Todos vs Todos</option>
                         <option value="hora">Fecha y Hora</option>
                         <option value="cancha">Cancha</option>
@@ -228,7 +236,7 @@
                 </div>
             </div>
 
-            <div id="contenedorPartidosCalendario" class="space-y-3 pt-2"></div>
+            <div id="contenedorPartidosCalendario" class="space-y-4 pt-2"></div>
         </div>
 
     </main>
