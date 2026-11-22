@@ -37,6 +37,7 @@ function crearEstructuraCategoria(nombreCat) {
         diasJuego: '',
         condiciones: '',
         cantidadGrupos: 2,
+        diasTodosContraTodos: 1,
         grupos: [],
         eliminatoria: {
             rondaActual: null,
@@ -147,6 +148,14 @@ function hidratarEstadoDesdeObjeto(nube) {
                 ...existente,
                 ...(valor || {}),
                 nombre: catNormalizada,
+                cantidadGrupos: Math.max(
+                    1,
+                    Math.min(20, parseInt(valor?.cantidadGrupos, 10) || existente.cantidadGrupos || 2)
+                ),
+                diasTodosContraTodos: Math.max(
+                    1,
+                    Math.min(30, parseInt(valor?.diasTodosContraTodos, 10) || existente.diasTodosContraTodos || 1)
+                ),
                 grupos: Array.isArray(valor?.grupos) ? valor.grupos : [],
                 eliminatoria: {
                     ...existente.eliminatoria,
@@ -533,7 +542,8 @@ function renderTodoCalendario() {
     if (reglasEl) {
         const dias = catData.diasJuego ? `Días: ${catData.diasJuego}` : 'Días por definir';
         const cond = catData.condiciones ? `Condiciones: ${catData.condiciones}` : 'Sin condiciones extra';
-        reglasEl.textContent = `${dias} • ${cond}`;
+        const diasTvT = catData.diasTodosContraTodos ? `Todos vs todos: ${catData.diasTodosContraTodos} día(s)` : '';
+        reglasEl.textContent = [dias, cond, diasTvT].filter(Boolean).join(' • ');
     }
 
     const contCanchas = document.getElementById('listaCanchasConfiguradas');
@@ -665,8 +675,8 @@ function renderTodoCalendario() {
         if (criterioOrden === 'cancha') {
             return (a.partido.cancha || 'ZZZ').localeCompare(b.partido.cancha || 'ZZZ');
         }
-        const ordA = a.partido.orden ?? a.partido.jornada ?? 999;
-        const ordB = b.partido.orden ?? b.partido.jornada ?? 999;
+        const ordA = a.partido.orden ?? a.partido.diaTodosContraTodos ?? a.partido.jornada ?? 999;
+        const ordB = b.partido.orden ?? b.partido.diaTodosContraTodos ?? b.partido.jornada ?? 999;
         return ordA - ordB;
     });
 
@@ -681,9 +691,9 @@ function renderTodoCalendario() {
 
     if (filtrados.length === 0) {
         cont.innerHTML = `
-            <div class="bg-white rounded-2xl border border-slate-200 p-8 text-center space-y-2">
+            <div class="bg-white rounded-3xl border border-slate-200 p-8 text-center space-y-2">
                 <p class="text-sm font-black text-slate-700">No hay partidos para mostrar en ${catActiva}</p>
-                <p class="text-xs text-slate-500">Genera los grupos de <strong>${catActiva}</strong> en <strong>Match Control</strong> o ajusta los filtros.</p>
+                <p class="text-xs text-slate-500">Asigna manualmente los equipos a sus grupos y genera el todos contra todos de <strong>${catActiva}</strong> en <strong>Match Control</strong>.</p>
             </div>
         `;
         return;
@@ -703,13 +713,14 @@ function renderTodoCalendario() {
             : [...nombresCanchas, partido.cancha];
 
         const divEtq = eqA.division && eqA.division !== '-' ? ` • ${eqA.division}` : '';
+        const diaTvT = partido.diaTodosContraTodos || partido.jornada || 1;
 
         return `
             <div class="bg-white rounded-2xl border ${tieneChoque ? 'border-amber-400 bg-amber-50/30' : 'border-slate-200'} p-4 shadow-glass space-y-3">
                 <div class="flex flex-wrap items-center justify-between gap-2 text-[11px] font-black uppercase">
                     <div class="flex items-center gap-2">
                         <span class="px-2.5 py-1 rounded-lg bg-blue-50 text-brand-electric">${bloqueEtiqueta}${divEtq}</span>
-                        <span class="text-slate-400">Jornada ${partido.jornada || partidoIdx + 1}</span>
+                        <span class="text-slate-400">Día ${diaTvT}</span>
                     </div>
                     <span class="${tieneChoque ? 'text-amber-700' : 'text-slate-500'}">
                         ${tieneChoque ? '<i class="fas fa-triangle-exclamation mr-1"></i>Choque de cancha y horario' : (partido.ganadorId ? `<span class="text-emerald-600">Resultado: ${partido.setsA}-${partido.setsB}</span>` : 'Pendiente')}
@@ -851,7 +862,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 partido.cancha = canchaNombre;
                 partido.divisionSemanal = division;
                 if (fechasDisponibles.length > 0) {
-                    partido.dia = fechasDisponibles[idx % fechasDisponibles.length];
+                    const diaIndice = ((partido.diaTodosContraTodos || partido.jornada || idx + 1) - 1 + Math.floor(idx / fechasDisponibles.length)) % fechasDisponibles.length;
+                    partido.dia = fechasDisponibles[Math.max(0, diaIndice)];
                 }
                 if (!partido.orden) {
                     partido.orden = idx + 1;
