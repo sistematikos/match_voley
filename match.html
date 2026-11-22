@@ -123,7 +123,7 @@
             </button>
         </div>
 
-        <!-- 1. REGISTRO DE EQUIPOS -->
+        <!-- 1. REGISTRO DE EQUIPOS Y ARMADO MANUAL DE GRUPOS -->
         <section id="vista-equipos" class="space-y-6">
             <div class="bg-white rounded-3xl border border-slate-200 p-6 shadow-glass">
                 <div class="flex flex-wrap items-center justify-between gap-2 mb-5">
@@ -131,7 +131,7 @@
                         <h2 class="text-base font-black uppercase tracking-tight text-slate-900">
                             <i class="fas fa-plus-circle text-brand-electric mr-1.5"></i> Agregar Equipo al Torneo
                         </h2>
-                        <p class="text-xs text-slate-500 font-semibold">Cada categoría juega con sus propios grupos según cuántos equipos tenga inscritos.</p>
+                        <p class="text-xs text-slate-500 font-semibold">Registra los equipos y luego asígnalos manualmente a los grupos de la categoría.</p>
                     </div>
                     <span class="text-[11px] font-bold bg-blue-50 text-brand-electric px-3 py-1.5 rounded-xl">
                         Formato oficial: Mejor de 3 Sets (Gana el primero en 2 sets)
@@ -184,7 +184,7 @@
                 </form>
             </div>
 
-            <div class="bg-white rounded-3xl border border-slate-200 p-6 shadow-glass space-y-4">
+            <div class="bg-white rounded-3xl border border-slate-200 p-6 shadow-glass space-y-6">
                 <div class="flex flex-wrap items-center justify-between gap-4">
                     <div>
                         <h3 class="text-sm font-black uppercase tracking-wider text-slate-800">
@@ -195,17 +195,39 @@
 
                     <div class="flex flex-wrap items-center gap-2">
                         <div class="flex items-center gap-2 bg-blue-50 border border-brand-electric/20 px-3 py-1.5 rounded-xl">
-                            <label class="text-[11px] font-extrabold text-brand-electric uppercase">Grupos de esta categoría:</label>
+                            <label class="text-[11px] font-extrabold text-brand-electric uppercase">Cuántos grupos:</label>
                             <input type="number" id="cantidadGrupos" value="2" min="1" max="20" onchange="actualizarCantidadGruposInput(this.value)" class="w-14 p-1 bg-white border border-slate-200 rounded-lg text-xs font-black text-center">
                         </div>
 
-                        <button onclick="generarFaseGruposCategoria()" class="py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow transition cursor-pointer">
-                            <i class="fas fa-calendar-plus mr-1"></i> Generar Grupos de la Categoría
+                        <div class="flex items-center gap-2 bg-amber-50 border border-amber-300/60 px-3 py-1.5 rounded-xl">
+                            <label class="text-[11px] font-extrabold text-amber-800 uppercase">Días todos vs todos:</label>
+                            <input type="number" id="diasTodosContraTodos" value="1" min="1" max="30" onchange="actualizarDiasTodosContraTodosInput(this.value)" class="w-14 p-1 bg-white border border-slate-200 rounded-lg text-xs font-black text-center">
+                        </div>
+
+                        <button type="button" onclick="generarFaseGruposCategoria()" class="py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow transition cursor-pointer">
+                            <i class="fas fa-calendar-plus mr-1"></i> Generar Todos vs Todos
                         </button>
                     </div>
                 </div>
 
-                <div class="overflow-x-auto">
+                <!-- CONSTRUCTOR MANUAL DE GRUPOS -->
+                <div class="pt-4 border-t border-slate-100 space-y-3">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                            <h4 class="text-xs font-black uppercase tracking-wider text-slate-900">
+                                <i class="fas fa-hand-pointer text-brand-electric mr-1"></i> Asignación Manual de Equipos por Grupo
+                            </h4>
+                            <p class="text-[11px] text-slate-500 font-semibold">Marca manualmente qué equipos van en cada grupo y luego presiona <strong>Generar Todos vs Todos</strong>.</p>
+                        </div>
+                        <button type="button" onclick="limpiarAsignacionManualGrupos()" class="py-1.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-[11px] font-black uppercase text-slate-700 transition cursor-pointer">
+                            <i class="fas fa-rotate-left mr-1"></i> Limpiar Grupos
+                        </button>
+                    </div>
+
+                    <div id="constructorManualGrupos" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+                </div>
+
+                <div class="overflow-x-auto pt-4 border-t border-slate-100">
                     <table class="w-full text-left border-collapse">
                         <thead>
                             <tr class="border-b border-slate-200 text-[11px] font-black uppercase text-slate-500">
