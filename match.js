@@ -387,6 +387,22 @@ async function actualizarReglaCategoria() {
     await guardarEnSupabase();
 }
 
+function deduplicarEquiposEnGrupos(catData) {
+    if (!Array.isArray(catData.grupos)) return;
+    const asignados = new Set();
+
+    catData.grupos.forEach((grupo) => {
+        const limpios = [];
+        (grupo.equiposIds || []).forEach((id) => {
+            if (!asignados.has(id)) {
+                asignados.add(id);
+                limpios.push(id);
+            }
+        });
+        grupo.equiposIds = limpios;
+    });
+}
+
 function sincronizarBorradoresGruposConCantidad(catData) {
     const letras = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
     const numGrupos = Math.max(1, Math.min(20, parseInt(catData.cantidadGrupos, 10) || 1));
@@ -410,9 +426,11 @@ function sincronizarBorradoresGruposConCantidad(catData) {
 
     catData.grupos.forEach((g, idx) => {
         g.nombre = g.nombre || `Grupo ${letras[idx] || idx + 1}`;
-        g.equiposIds = Array.isArray(g.equiposIds) ? Array.from(new Set(g.equiposIds)) : [];
+        g.equiposIds = Array.isArray(g.equiposIds) ? g.equiposIds : [];
         g.partidos = Array.isArray(g.partidos) ? g.partidos : [];
     });
+
+    deduplicarEquiposEnGrupos(catData);
 }
 
 function actualizarCantidadGruposInput(valor) {
@@ -437,17 +455,19 @@ function alternarEquipoEnGrupoManual(grupoIdx, equipoId, marcado) {
     const catData = obtenerDatosCategoriaActiva();
     sincronizarBorradoresGruposConCantidad(catData);
 
-    const grupo = catData.grupos[grupoIdx];
-    if (!grupo) return;
+    const grupoDestino = catData.grupos[grupoIdx];
+    if (!grupoDestino) return;
 
-    const setIds = new Set(grupo.equiposIds || []);
+    // Quita el equipo de todos los grupos para evitar que esté en dos grupos a la vez
+    catData.grupos.forEach((g) => {
+        g.equiposIds = (g.equiposIds || []).filter((id) => id !== equipoId);
+    });
+
     if (marcado) {
-        setIds.add(equipoId);
-    } else {
-        setIds.delete(equipoId);
+        grupoDestino.equiposIds.push(equipoId);
     }
-    grupo.equiposIds = Array.from(setIds);
 
+    deduplicarEquiposEnGrupos(catData);
     renderResumenGruposCategoria();
     renderConstructorManualGrupos();
     guardarEstado();
@@ -478,18 +498,38 @@ function renderConstructorManualGrupos() {
         return;
     }
 
+    // Mapa rápido: equipoId -> nombre de grupo donde ya está asignado
+    const grupoPorEquipo = {};
+    catData.grupos.forEach((g) => {
+        (g.equiposIds || []).forEach((id) => {
+            grupoPorEquipo[id] = g.nombre;
+        });
+    });
+
     cont.innerHTML = catData.grupos.map((grupo, gIdx) => {
         const seleccionados = new Set(grupo.equiposIds || []);
 
         const checksHtml = poolEquipos.map((eq) => {
             const checked = seleccionados.has(eq.id);
+            const asignadoEnOtro = !checked && Boolean(grupoPorEquipo[eq.id]);
+
             return `
-                <label class="flex items-center justify-between gap-2 p-2 rounded-xl border ${checked ? 'border-brand-electric bg-blue-50/70' : 'border-slate-200 bg-white'} cursor-pointer transition">
+                <label class="flex items-center justify-between gap-2 p-2 rounded-xl border ${
+                    checked
+                        ? 'border-brand-electric bg-blue-50/70 cursor-pointer'
+                        : asignadoEnOtro
+                            ? 'border-slate-200 bg-slate-100/80 opacity-60 cursor-not-allowed'
+                            : 'border-slate-200 bg-white cursor-pointer'
+                } transition">
                     <span class="flex items-center gap-2 truncate">
-                        <input type="checkbox" ${checked ? 'checked' : ''} onchange="alternarEquipoEnGrupoManual(${gIdx}, '${eq.id}', this.checked)" class="rounded text-brand-electric focus:ring-brand-electric">
+                        <input type="checkbox" ${checked ? 'checked' : ''} ${asignadoEnOtro ? 'disabled' : ''}
+                            onchange="alternarEquipoEnGrupoManual(${gIdx}, '${eq.id}', this.checked)"
+                            class="rounded text-brand-electric focus:ring-brand-electric">
                         <span class="text-xs font-black text-slate-800 truncate">${eq.club}</span>
                     </span>
-                    <span class="text-[10px] font-bold text-slate-500 shrink-0">${eq.rama} • ${eq.division}</span>
+                    <span class="text-[10px] font-bold ${asignadoEnOtro ? 'text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded' : 'text-slate-500'} shrink-0">
+                        ${asignadoEnOtro ? `En ${grupoPorEquipo[eq.id]}` : `${eq.rama} • ${eq.division}`}
+                    </span>
                 </label>
             `;
         }).join('');
@@ -634,10 +674,15 @@ async function generarFaseGruposCategoria() {
     catData.cantidadGrupos = catData.grupos.length;
 
     const idsValidos = new Set(obtenerEquiposDeCategoriaFiltrados().map((e) => e.id));
+    const yaUsados = new Set();
     let totalGenerados = 0;
 
     catData.grupos.forEach((grupo, gIdx) => {
-        const ids = (grupo.equiposIds || []).filter((id) => idsValidos.has(id));
+        const ids = (grupo.equiposIds || []).filter((id) => {
+            if (!idsValidos.has(id) || yaUsados.has(id)) return false;
+            yaUsados.add(id);
+            return true;
+        });
         grupo.equiposIds = ids;
 
         const cruces = [];
